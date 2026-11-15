@@ -1,0 +1,10 @@
+Requisito,Regla_Negocio,Entidad_Conceptual,Tabla_Columna_Logica,Estado,Responsable_Validacion
+R01,N/A,INSTITUCION_EDUCATIVA;COHORTE,INSTITUCION_EDUCATIVA(codigo_dane);COHORTE(id_cohorte;codigo_dane;anio_lectivo;jornada),PROPUESTO,Estudiante / Tutor
+R02,RN05,ESCALA_EVALUACION;INSTRUMENTO_EVALUACION;AREA_EVALUACION,ESCALA_EVALUACION(valor_minimo;valor_maximo);INSTRUMENTO_EVALUACION(id_escala;tipo_instrumento);AREA_EVALUACION(codigo_area),PROPUESTO,Estudiante / Tutor
+R03,RN01;RN03,ESTUDIANTE_SEUDONIMO;RESULTADO_EVALUACION,ESTUDIANTE_SEUDONIMO(id_estudiante_hash);RESULTADO_EVALUACION(id_estudiante_hash;id_instrumento;id_area;puntaje_obtenido),PROPUESTO,Estudiante / Tutor
+R03,RN02;RN03,RESULTADO_AGREGADO_IE,RESULTADO_AGREGADO_IE(id_cohorte;id_instrumento;id_area;cantidad_evaluados;puntaje_promedio),PROPUESTO,Estudiante / Tutor
+R04,RN04;RN05,PROMEDIO_NACIONAL_REF,PROMEDIO_NACIONAL_REF(anio_vigencia;id_area;id_escala;fuente_oficial;puntaje_promedio),PROPUESTO,Estudiante / Tutor
+R05,N/A,APOYO_INSTITUCIONAL,APOYO_INSTITUCIONAL(id_cohorte;tipo_apoyo;monto_invertido;beneficiarios_cubiertos),PROPUESTO,Estudiante / Tutor
+R06,RN03,PLAN_MEJORAMIENTO;SEGUIMIENTO_ACTIVIDAD_PLAN,PLAN_MEJORAMIENTO(id_plan;meta_cuantitativa);SEGUIMIENTO_ACTIVIDAD_PLAN(id_plan;nombre_actividad;fecha_seguimiento;porcentaje_avance_corte),PROPUESTO,Estudiante / Tutor
+R07,RN02;RN04,TRANSFORMACION_ESCALA;PARAMETRO_SISTEMA,TRANSFORMACION_ESCALA(id_escala_origen;id_escala_destino;factor_multiplicador;constante_desplazamiento);PARAMETRO_SISTEMA(clave_parametro;valor_parametro),PROPUESTO,Estudiante / Tutor
+R08,RN01;RN02;RN04,Consultas Q1-Q4,Pendiente de implementacion fisica en Fase 3 y consultas en Fase 5,Pendiente,Estudiante / Tutor

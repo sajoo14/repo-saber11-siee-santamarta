@@ -1,0 +1,181 @@
+@startuml 07_diagrama_logico
+!theme plain
+hide circle
+skinparam linetype ortho
+skinparam roundcorner 6
+skinparam shadowing false
+skinparam nodesep 55
+skinparam ranksep 60
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #1E3A8A
+    HeaderBackgroundColor #DBEAFE
+    FontColor #0F172A
+}
+
+title Diagrama Logico Relacional Normalizado 3FN (Fase 2 · 14 Tablas)\nDominios Logicos Independientes del SGBD · Claves PK, FK y UQ
+
+entity "INSTITUCION_EDUCATIVA" as IE {
+    * codigo_dane : Texto(12) <<PK>>
+    --
+    * nombre_ie : Texto(150) <<UQ>>
+    o comuna_localidad : Texto(60)
+    * sector : Texto(20)
+    * calendario : Caracter(1)
+    o jornada_predominante : Texto(20)
+    * estado_activa : Booleano
+}
+
+entity "COHORTE" as COH {
+    * id_cohorte : Entero <<PK>>
+    --
+    * codigo_dane : Texto(12) <<FK, UQ1>>
+    * anio_lectivo : Entero <<UQ1>>
+    * jornada : Texto(20) <<UQ1>>
+    o total_matriculados : Entero
+}
+
+entity "ESTUDIANTE_SEUDONIMO" as EST {
+    * id_estudiante_hash : Texto(64) <<PK>>
+    --
+    * id_cohorte : Entero <<FK>>
+}
+
+entity "ESCALA_EVALUACION" as ESC {
+    * id_escala : Entero <<PK>>
+    --
+    * nombre_escala : Texto(60) <<UQ>>
+    * valor_minimo : Decimal(6,2)
+    * valor_maximo : Decimal(6,2)
+    * permite_decimales : Booleano
+    * unidad_medida : Texto(25)
+}
+
+entity "TRANSFORMACION_ESCALA" as TRANS {
+    * id_transformacion : Entero <<PK>>
+    --
+    * id_escala_origen : Entero <<FK, UQ1>>
+    * id_escala_destino : Entero <<FK, UQ1>>
+    * factor_multiplicador : Decimal(10,6)
+    * constante_desplazamiento : Decimal(10,4)
+    * metodo_justificacion : TextoLargo
+    * vigente : Booleano <<UQ1>>
+}
+
+entity "INSTRUMENTO_EVALUACION" as INST {
+    * id_instrumento : Entero <<PK>>
+    --
+    * id_escala : Entero <<FK>>
+    * tipo_instrumento : Texto(20)
+    * nombre_instrumento : Texto(100) <<UQ1>>
+    * fuente_emision : Texto(80) <<UQ1>>
+    * periodo_aplicacion : Texto(15) <<UQ1>>
+}
+
+entity "AREA_EVALUACION" as AREA {
+    * id_area : Entero <<PK>>
+    --
+    * codigo_area : Texto(10) <<UQ1>>
+    * nombre_area : Texto(80) <<UQ2>>
+    * es_nucleo_comun : Booleano
+}
+
+entity "RESULTADO_EVALUACION" as RES {
+    * id_estudiante_hash : Texto(64) <<PK, FK>>
+    * id_instrumento : Entero <<PK, FK>>
+    * id_area : Entero <<PK, FK>>
+    --
+    * puntaje_obtenido : Decimal(6,2)
+    o percentil_alcanzado : Decimal(5,2)
+    o nivel_desempeno : Texto(20)
+    * periodo_reporte : Texto(15)
+    * fecha_presentacion : Fecha
+    * fecha_registro : FechaHora
+}
+
+entity "RESULTADO_AGREGADO_IE" as RES_AG {
+    * id_agregado : Entero <<PK>>
+    --
+    * id_cohorte : Entero <<FK, UQ1>>
+    * id_instrumento : Entero <<FK, UQ1>>
+    * id_area : Entero <<FK, UQ1>>
+    * periodo_reporte : Texto(15) <<UQ1>>
+    * puntaje_promedio : Decimal(6,2)
+    o desviacion_estandar : Decimal(5,2)
+    * cantidad_evaluados : Entero
+    * fuente_reporte : Texto(80)
+    * fecha_registro : FechaHora
+}
+
+entity "PROMEDIO_NACIONAL_REF" as REF {
+    * id_referente : Entero <<PK>>
+    --
+    * anio_vigencia : Entero <<UQ1>>
+    * id_area : Entero <<FK, UQ1>>
+    * id_escala : Entero <<FK, UQ1>>
+    * puntaje_promedio : Decimal(6,2)
+    o desviacion_estandar : Decimal(5,2)
+    * fuente_oficial : Texto(100) <<UQ1>>
+}
+
+entity "PLAN_MEJORAMIENTO" as PLAN {
+    * id_plan : Entero <<PK>>
+    --
+    * codigo_dane : Texto(12) <<FK>>
+    * id_area : Entero <<FK>>
+    * anio_implementacion : Entero
+    * titulo_plan : Texto(150)
+    * diagnostico_base : TextoLargo
+    * meta_cuantitativa : Decimal(6,2)
+    * estado_plan : Texto(20)
+}
+
+entity "SEGUIMIENTO_ACTIVIDAD_PLAN" as SEG {
+    * id_seguimiento : Entero <<PK>>
+    --
+    * id_plan : Entero <<FK>>
+    * nombre_actividad : Texto(150)
+    * fecha_seguimiento : Fecha
+    * porcentaje_avance_corte : Decimal(5,2)
+    o observaciones : TextoLargo
+    * estado_actividad : Texto(20)
+}
+
+entity "APOYO_INSTITUCIONAL" as APOYO {
+    * id_apoyo : Entero <<PK>>
+    --
+    * id_cohorte : Entero <<FK>>
+    * tipo_apoyo : Texto(50)
+    * entidad_financiadora : Texto(100)
+    * monto_invertido : Decimal(14,2)
+    * beneficiarios_cubiertos : Entero
+    * fecha_desembolso : Fecha
+}
+
+entity "PARAMETRO_SISTEMA" as PARAM {
+    * clave_parametro : Texto(50) <<PK>>
+    --
+    * valor_parametro : Texto(100)
+    * descripcion : Texto(250)
+    * fecha_actualizacion : FechaHora
+}
+
+IE ||--o{ COH : "codigo_dane"
+IE ||--o{ PLAN : "codigo_dane"
+COH ||--o{ EST : "id_cohorte"
+COH ||--o{ APOYO : "id_cohorte"
+COH ||--o{ RES_AG : "id_cohorte"
+ESC ||--o{ INST : "id_escala"
+ESC ||--o{ TRANS : "id_escala_origen"
+ESC ||--o{ TRANS : "id_escala_destino"
+ESC ||--o{ REF : "id_escala"
+INST ||--o{ RES : "id_instrumento"
+INST ||--o{ RES_AG : "id_instrumento"
+AREA ||--o{ RES : "id_area"
+AREA ||--o{ RES_AG : "id_area"
+AREA ||--o{ REF : "id_area"
+AREA ||--o{ PLAN : "id_area"
+EST ||--o{ RES : "id_estudiante_hash"
+PLAN ||--|{ SEG : "id_plan"
+
+@enduml
