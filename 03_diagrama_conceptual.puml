@@ -1,0 +1,187 @@
+@startuml 03_diagrama_conceptual
+!theme plain
+hide circle
+skinparam linetype ortho
+skinparam roundcorner 6
+skinparam shadowing false
+skinparam nodesep 50
+skinparam ranksep 55
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #0F2C59
+    HeaderBackgroundColor #DBEAFE
+    FontColor #0F2C59
+}
+
+title Diagrama Conceptual (Fase 1 · 14 Entidades)\nREPRESENTACION EN PATA DE CUERVO (CROW'S FOOT) — NO ES CHEN\n(Ver especificacion textual Chen en 02_catalogo_conceptual.md)
+
+package "Dominio 1: Estructura Institucional y Poblacion" {
+    entity "INSTITUCION_EDUCATIVA" as IE {
+        * codigo_dane : Texto <<PK>>
+        --
+        * nombre_ie : Texto
+        o comuna_localidad : Texto
+        * sector : Texto
+        * calendario : Caracter
+        o jornada_predominante : Texto
+        * estado_activa : Booleano
+    }
+
+    entity "COHORTE" as COH {
+        * id_cohorte : Entero <<PK>>
+        --
+        * codigo_dane : Texto <<FK>>
+        * anio_lectivo : Entero
+        * jornada : Texto
+        o total_matriculados : Entero
+    }
+
+    entity "ESTUDIANTE_SEUDONIMO" as EST {
+        * id_estudiante_hash : Texto <<PK>>
+        --
+        * id_cohorte : Entero <<FK>>
+    }
+}
+
+package "Dominio 2: Evaluaciones, Escalas y Referentes" {
+    entity "ESCALA_EVALUACION" as ESC {
+        * id_escala : Entero <<PK>>
+        --
+        * nombre_escala : Texto
+        * valor_minimo : Decimal
+        * valor_maximo : Decimal
+        * permite_decimales : Booleano
+        * unidad_medida : Texto
+    }
+
+    entity "TRANSFORMACION_ESCALA" as TRANS {
+        * id_transformacion : Entero <<PK>>
+        --
+        * id_escala_origen : Entero <<FK>>
+        * id_escala_destino : Entero <<FK>>
+        * factor_multiplicador : Decimal
+        * constante_desplazamiento : Decimal
+        * metodo_justificacion : Texto
+        * vigente : Booleano
+    }
+
+    entity "INSTRUMENTO_EVALUACION" as INST {
+        * id_instrumento : Entero <<PK>>
+        --
+        * id_escala : Entero <<FK>>
+        * tipo_instrumento : Texto
+        * nombre_instrumento : Texto
+        * fuente_emision : Texto
+        * periodo_aplicacion : Texto
+    }
+
+    entity "AREA_EVALUACION" as AREA {
+        * id_area : Entero <<PK>>
+        --
+        * codigo_area : Texto
+        * nombre_area : Texto
+        * es_nucleo_comun : Booleano
+    }
+
+    entity "RESULTADO_EVALUACION" as RES {
+        * id_estudiante_hash : Texto <<PK, FK>>
+        * id_instrumento : Entero <<PK, FK>>
+        * id_area : Entero <<PK, FK>>
+        --
+        * puntaje_obtenido : Decimal
+        o percentil_alcanzado : Decimal
+        o nivel_desempeno : Texto
+        * periodo_reporte : Texto
+        * fecha_presentacion : Fecha
+        * fecha_registro : FechaHora
+    }
+
+    entity "RESULTADO_AGREGADO_IE" as RES_AG {
+        * id_agregado : Entero <<PK>>
+        --
+        * id_cohorte : Entero <<FK>>
+        * id_instrumento : Entero <<FK>>
+        * id_area : Entero <<FK>>
+        * periodo_reporte : Texto
+        * puntaje_promedio : Decimal
+        o desviacion_estandar : Decimal
+        * cantidad_evaluados : Entero
+        * fuente_reporte : Texto
+        * fecha_registro : FechaHora
+    }
+
+    entity "PROMEDIO_NACIONAL_REF" as REF {
+        * id_referente : Entero <<PK>>
+        --
+        * anio_vigencia : Entero
+        * id_area : Entero <<FK>>
+        * id_escala : Entero <<FK>>
+        * puntaje_promedio : Decimal
+        o desviacion_estandar : Decimal
+        * fuente_oficial : Texto
+    }
+}
+
+package "Dominio 3: Mejoramiento, Apoyos y Gobernanza" {
+    entity "PLAN_MEJORAMIENTO" as PLAN {
+        * id_plan : Entero <<PK>>
+        --
+        * codigo_dane : Texto <<FK>>
+        * id_area : Entero <<FK>>
+        * anio_implementacion : Entero
+        * titulo_plan : Texto
+        * diagnostico_base : Texto
+        * meta_cuantitativa : Decimal
+        * estado_plan : Texto
+    }
+
+    entity "SEGUIMIENTO_ACTIVIDAD_PLAN" as SEG {
+        * id_seguimiento : Entero <<PK>>
+        --
+        * id_plan : Entero <<FK>>
+        * nombre_actividad : Texto
+        * fecha_seguimiento : Fecha
+        * porcentaje_avance_corte : Decimal
+        o observaciones : Texto
+        * estado_actividad : Texto
+    }
+
+    entity "APOYO_INSTITUCIONAL" as APOYO {
+        * id_apoyo : Entero <<PK>>
+        --
+        * id_cohorte : Entero <<FK>>
+        * tipo_apoyo : Texto
+        * entidad_financiadora : Texto
+        * monto_invertido : Decimal
+        * beneficiarios_cubiertos : Entero
+        * fecha_desembolso : Fecha
+    }
+
+    entity "PARAMETRO_SISTEMA" as PARAM {
+        * clave_parametro : Texto <<PK>>
+        --
+        * valor_parametro : Texto
+        * descripcion : Texto
+        * fecha_actualizacion : FechaHora
+    }
+}
+
+IE ||--o{ COH : "organiza"
+IE ||--o{ PLAN : "formula"
+COH ||--o{ EST : "agrupa"
+COH ||--o{ APOYO : "recibe"
+COH ||--o{ RES_AG : "consolida"
+ESC ||--o{ INST : "rige"
+ESC ||--o{ TRANS : "es origen"
+ESC ||--o{ TRANS : "es destino"
+ESC ||--o{ REF : "mide en"
+INST ||--o{ RES : "genera"
+INST ||--o{ RES_AG : "reporta"
+AREA ||--o{ RES : "evalua"
+AREA ||--o{ RES_AG : "agrupa"
+AREA ||--o{ REF : "discrimina"
+AREA ||--o{ PLAN : "prioriza"
+EST ||--o{ RES : "obtiene"
+PLAN ||--|{ SEG : "registra seguimiento"
+
+@enduml

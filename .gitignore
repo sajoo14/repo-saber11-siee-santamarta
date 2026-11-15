@@ -1,0 +1,10 @@
+# Borradores históricos obsoletos del modelo preliminar de 11 tablas
+_archivo_historico/
+
+# Archivos temporales de Office / Windows / Python
+~$*.docx
+~$*.xlsx
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
