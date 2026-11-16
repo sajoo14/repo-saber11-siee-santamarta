@@ -52,7 +52,7 @@ SELECT
     (SELECT COUNT(*)
        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
       WHERE TABLE_SCHEMA = 'repo_saber_siee_sm'
-        AND CONSTRAINT_TYPE = 'UNIQUE')                        AS total_unique_esp_9,
+        AND CONSTRAINT_TYPE = 'UNIQUE')                        AS total_unique_esp_11,
     (SELECT COUNT(*)
        FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS
       WHERE CONSTRAINT_SCHEMA = 'repo_saber_siee_sm')          AS total_check_esp_52,
@@ -65,15 +65,15 @@ SELECT
       WHERE TABLE_SCHEMA = 'repo_saber_siee_sm')               AS total_vistas_esp_3,
     (SELECT COUNT(*)
        FROM INFORMATION_SCHEMA.TRIGGERS
-      WHERE TRIGGER_SCHEMA = 'repo_saber_siee_sm')             AS total_triggers_esp_9,
+      WHERE TRIGGER_SCHEMA = 'repo_saber_siee_sm')             AS total_triggers_esp_12,
     (SELECT COUNT(*)
        FROM INFORMATION_SCHEMA.ROUTINES
       WHERE ROUTINE_SCHEMA = 'repo_saber_siee_sm'
-        AND ROUTINE_TYPE = 'FUNCTION')                         AS total_udf_esp_1,
+        AND ROUTINE_TYPE = 'FUNCTION')                         AS total_udf_esp_2,
     (SELECT COUNT(*)
        FROM INFORMATION_SCHEMA.ROUTINES
       WHERE ROUTINE_SCHEMA = 'repo_saber_siee_sm'
-        AND ROUTINE_TYPE = 'PROCEDURE')                        AS total_sp_esp_2;
+        AND ROUTINE_TYPE = 'PROCEDURE')                        AS total_sp_esp_3;
 
 -- -------------------------------------------------------------------------------------
 -- 2. VERIFICACIÓN DE LAS 14 TABLAS BASE: MOTOR, COLLATION Y TABLE_COMMENT
@@ -90,7 +90,7 @@ WHERE TABLE_SCHEMA = 'repo_saber_siee_sm'
 ORDER BY TABLE_NAME;
 
 -- -------------------------------------------------------------------------------------
--- 3. VERIFICACIÓN DE LAS 82 COLUMNAS: TIPO, NULABILIDAD, DEFAULT, EXTRA Y COLUMN_COMMENT
+-- 3. VERIFICACIÓN DE LAS 89 COLUMNAS: TIPO, NULABILIDAD, DEFAULT, EXTRA Y COLUMN_COMMENT
 -- -------------------------------------------------------------------------------------
 SELECT
     c.TABLE_NAME,
@@ -111,7 +111,7 @@ WHERE c.TABLE_SCHEMA = 'repo_saber_siee_sm'
 ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION;
 
 -- -------------------------------------------------------------------------------------
--- 4. VERIFICACIÓN DE LAS 18 CLAVES FORÁNEAS Y SUS POLÍTICAS ON DELETE / ON UPDATE
+-- 4. VERIFICACIÓN DE LAS 17 CLAVES FORÁNEAS Y SUS POLÍTICAS ON DELETE / ON UPDATE
 -- -------------------------------------------------------------------------------------
 SELECT
     rc.TABLE_NAME              AS tabla_hija,
@@ -130,7 +130,7 @@ WHERE rc.CONSTRAINT_SCHEMA = 'repo_saber_siee_sm'
 ORDER BY rc.TABLE_NAME, rc.CONSTRAINT_NAME;
 
 -- -------------------------------------------------------------------------------------
--- 5. VERIFICACIÓN DE LAS 41 RESTRICCIONES CHECK PERSISTIDAS EN EL CATÁLOGO
+-- 5. VERIFICACIÓN DE LAS 52 RESTRICCIONES CHECK PERSISTIDAS EN EL CATÁLOGO
 -- -------------------------------------------------------------------------------------
 SELECT
     TABLE_NAME,

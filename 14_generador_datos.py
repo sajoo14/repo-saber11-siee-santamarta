@@ -535,23 +535,30 @@ def main():
             ))
 
     # B) 11.985 filas en cohortes normales:
-    # Recorremos las 150 cohortes normales (50 colegios x 3 años):
-    # En cada cohorte (20 estudiantes), evaluamos en SABER_11 (áreas 1=MAT y 2=LEC),
-    # SIMULACRO (área 1=MAT) y SIEE (área 1=MAT) hasta completar exactamente 12.000 filas.
+    # Distribuimos los 11.985 microdatos cubriendo las 5 áreas nucleares del Icfes
+    # (1=MAT, 2=LEC, 3=SOC, 4=NAT, 5=ING) y garantizando variaciones interanuales
+    # diferenciadas por colegio (sin empates artificiales en el ranking Q3/C03).
     for (id_coh, dane, anio, _, _) in cohortes_normales_meta:
         dane_num = int(dane[-2:])
-        # Los primeros 25 colegios tienen mayor efecto de mejora interanual (para Q3 y Q4)
-        mejora_anual = (anio - 2022) * (3 if dane_num <= 25 else 1)
-        base_colegio = 43 + (dane_num % 14) + mejora_anual
+        # Ganancia base diferenciada según intensidad del plan y código del colegio
+        ganancia_base = (anio - 2022) * (3 if dane_num <= 25 else 1)
+        base_colegio = 42 + (dane_num % 14) + ganancia_base
 
         id_sim = inst_microdatos_por_anio[anio]["SIMULACRO"]
         id_siee = inst_microdatos_por_anio[anio]["SIEE"]
         id_saber = inst_microdatos_por_anio[anio]["SABER_11"]
 
+        # Asignamos la segunda área evaluada en Saber 11 de forma cíclica coprima con las 13 zonas
+        # (mcd(4, 13) = 1) para cubrir uniformemente LEC (2), SOC (3), NAT (4) e ING (5) en todo el Distrito
+        segunda_area = ((dane_num - 1) % 4) + 2
+
         for h_idx, h in enumerate(estudiantes_normales_por_cohorte[id_coh]):
+            # Bono diferencial por estudiante y año para que cada colegio tenga un promedio único sin empates planos
+            bono_est = (anio - 2022) * (2 if h_idx < ((dane_num * 3) % 19) + 1 else 0)
+
             # 1) SABER_11 en Matemáticas (id_area = 1, escala 1 entera 0..100)
             if len(resultados_eval) < 12000:
-                pts = float(max(20, min(98, base_colegio + ((h_idx % 9) - 4))))
+                pts = float(max(20, min(98, base_colegio + bono_est + ((h_idx % 9) - 4))))
                 perc = round(min(99.5, max(1.0, pts * 1.05)), 2)
                 niv = "AVANZADO" if pts >= 70 else ("SATISFACTORIO" if pts >= 50 else ("MINIMO" if pts >= 36 else "INSUFICIENTE"))
                 resultados_eval.append((
@@ -560,13 +567,13 @@ def main():
                     sql_str(f"{anio}-09-15 14:00:00"),
                 ))
 
-            # 2) SABER_11 en Lectura Crítica (id_area = 2, escala 1 entera 0..100)
+            # 2) SABER_11 en segunda área nuclear (2=LEC, 3=SOC, 4=NAT, 5=ING, escala 1 entera 0..100)
             if len(resultados_eval) < 12000:
-                pts = float(max(22, min(99, base_colegio + 3 + ((h_idx % 7) - 3))))
+                pts = float(max(22, min(99, base_colegio + bono_est + (segunda_area % 4) + ((h_idx % 7) - 3))))
                 perc = round(min(99.5, max(1.0, pts * 1.04)), 2)
                 niv = "AVANZADO" if pts >= 66 else ("SATISFACTORIO" if pts >= 51 else ("MINIMO" if pts >= 36 else "INSUFICIENTE"))
                 resultados_eval.append((
-                    sql_str(h), str(id_saber), "2", f"{pts:.2f}", f"{perc:.2f}",
+                    sql_str(h), str(id_saber), str(segunda_area), f"{pts:.2f}", f"{perc:.2f}",
                     sql_str(niv), sql_str(f"{anio}-2"), sql_str(f"{anio}-08-18"),
                     sql_str(f"{anio}-09-15 14:00:00"),
                 ))

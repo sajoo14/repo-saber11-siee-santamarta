@@ -39,24 +39,29 @@ Este repositorio implementa una solución integral de **14 tablas en Tercera For
 | **3** | 12 | `resultado_agregado_ie` | Consolidados institucionales cuando no existen microdatos individuales (`R03`, `RN02`, `RN03`) | `id_agregado` | 120 |
 | **3** | 13 | `seguimiento_actividad_plan` | **Historial Principal #1:** Cortes periódicos de avance de actividades sin sobrescribir (`R06`, `RN03`) | `id_seguimiento` | **10.000** |
 | **4** | 14 | `resultado_evaluacion` | **Hechos Principales #2:** Microdatos inmutables por estudiante seudónimo, instrumento y área (`R03`, `RN03`, `RN05`) | `(id_estudiante_hash, id_instrumento, id_area)` | **12.000** |
-| — | — | **TOTAL** | **14 Tablas (`ENGINE=InnoDB`)** | **14 PK / 17 FK / 9 UQ / 52 CHECK / 18 Índices** | **25.951** |
+| — | — | **TOTAL** | **14 Tablas (`ENGINE=InnoDB`)** | **14 PK / 17 FK / 11 UQ / 52 CHECK / 18 Índices** | **25.951** |
 
 ---
 
-## 3. Capa de Programabilidad Implementada (`12d_objetos_programables_mariadb.sql`)
+## 3. Capa de Programabilidad y Seguridad RBAC (`12d_` y `15b_`)
 
-* **1 Función Definida por el Usuario (UDF):**
+* **2 Funciones Definidas por el Usuario (UDFs):**
   * `fn_transformar_puntaje(p_puntaje, p_escala_origen, p_escala_destino)`: Homologa puntajes entre escalas consultando `transformacion_escala` (`vigente = 1`) o retorna `NULL` si no existe regla aprobada (`RN04`).
-* **9 Disparadores (`TRIGGERS`):**
-  * Validación cruzada de rango `[valor_minimo, valor_maximo]` y precisión decimal (`RN05`): `trg_res_validar_rango_ins`, `trg_resag_validar_rango_ins`, `trg_ref_validar_rango_ins`.
+  * `fn_clasificar_brecha_nacional(p_puntaje_ie, p_puntaje_nacional, p_escala_ie, p_escala_nac)`: Homologa y clasifica semánticamente el desempeño frente al promedio nacional (`SUPERIOR_AL_NACIONAL`, `EN_PARIDAD_NACIONAL`, `REZAGO_MODERADO`, `REZAGO_CRITICO`).
+* **12 Disparadores (`TRIGGERS`):**
+  * Validación cruzada de rango `[valor_minimo, valor_maximo]`, precisión decimal (`RN05`), coherencia temporal año estudiante–cohorte y unicidad de regla vigente (`RN04`): `trg_res_validar_rango_ins`, `trg_resag_validar_rango_ins`, `trg_ref_validar_rango_ins`, `trg_trans_unica_vigente_ins`.
   * Bloqueo estricto de inmutabilidad histórica ante `UPDATE` y `DELETE` con `SIGNAL SQLSTATE '45000'` (`RN03`): `trg_res_inmutabilidad_upd/del`, `trg_resag_inmutabilidad_upd/del`, `trg_seg_inmutabilidad_upd/del`.
-* **2 Procedimientos Almacenados Transaccionales (`START TRANSACTION` / `COMMIT` / `ROLLBACK` + `EXIT HANDLER`):**
+  * Auditoría automática de cambios (`CURRENT_USER()`, `OLD`, `NEW`) y protección de privacidad ($k \ge 5$): `trg_param_auditoria_upd`, `trg_plan_auditoria_upd`.
+* **3 Procedimientos Almacenados Transaccionales (`START TRANSACTION` / `COMMIT` / `ROLLBACK` + `EXIT HANDLER`):**
   * `sp_registrar_seguimiento_plan`: Inserta un nuevo corte de actividad y actualiza atómicamente el estado del plan (`EN_EJECUCION` / `CUMPLIDO`).
   * `sp_registrar_apoyo_institucional`: Registra un apoyo verificando con bloqueo `FOR UPDATE` que la institución esté activa y que `beneficiarios_cubiertos <= total_matriculados`.
+  * `sp_actualizar_parametro_sistema`: Actualiza parámetros de gobernanza validando el umbral mínimo de $k$-anonimato y registrando sello de auditoría.
 * **3 Vistas Analíticas con `GROUP BY` y `HAVING` (`RN02` $k$-anonimato):**
   * `vw_evolucion_ie_area_anio` (Pregunta Q1)
   * `vw_brecha_promedio_nacional` (Pregunta Q2)
   * `vw_impacto_simulacros_planes` (Preguntas Q3 y Q4)
+* **4 Roles Nativos de MariaDB y 4 Usuarios de Prueba (`15b_roles_y_seguridad_mariadb.sql`):**
+  * `rol_administrador_datos` (`usr_admin_sm`), `rol_operador_academico` (`usr_operador_sm`), `rol_control_evaluacion` (`usr_evaluacion_sm`) y `rol_auditor_consulta` (`usr_auditor_sm`), verificados con **8 pruebas de acceso permitido y denegado (`S-01+` a `S-04-`)**.
 
 ---
 
@@ -65,10 +70,10 @@ Este repositorio implementa una solución integral de **14 tablas en Tercera For
 Con el servicio **MySQL (MariaDB)** activo en XAMPP, ejecute en orden desde la terminal o cliente SQL:
 
 ```powershell
-# 1. Crear el esquema vacío documentado (14 tablas, 89 columnas, 17 FK, 52 CHECK, 18 índices)
+# 1. Crear el esquema vacío documentado (14 tablas, 89 columnas, 17 FK, 11 UQ, 52 CHECK, 18 índices)
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "SOURCE 12_creacion_esquema_mariadb.sql"
 
-# 2. Crear la capa de programabilidad (1 UDF, 9 Triggers, 2 Procedimientos, 3 Vistas)
+# 2. Crear la capa de programabilidad (2 UDFs, 12 Triggers, 3 Procedimientos, 3 Vistas)
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "SOURCE 12d_objetos_programables_mariadb.sql"
 
 # 3. Verificar la estructura y el 100 % de comentarios en INFORMATION_SCHEMA
@@ -83,7 +88,10 @@ C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -e "SOURCE 
 # 6. Ejecutar las verificaciones post-carga (conteos, 0 huérfanos, 0 duplicados, k-anonimato)
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -t -e "SOURCE 15_verificaciones_carga_mariadb.sql"
 
-# 7. Ejecutar las 12 consultas funcionales y analíticas (Q1–Q4 y casos límite)
+# 7. Configurar los 4 roles nativos de MariaDB, usuarios de prueba y privilegios RBAC
+C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -t -e "SOURCE 15b_roles_y_seguridad_mariadb.sql"
+
+# 8. Ejecutar las 15 consultas funcionales y analíticas (Capítulos 2 a 7, Q1–Q4 y casos límite)
 C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -t -e "SOURCE 16_consultas_validacion_mariadb.sql"
 ```
 
@@ -97,30 +105,31 @@ C:\xampp\mysql\bin\mysql.exe -u root --default-character-set=utf8mb4 -t -e "SOUR
 | **Marco** | `HANDOFF_CONTINUIDAD_PROYECTO.md` | Relevo | Estado integral del proyecto y guía de continuidad. |
 | **Fase 1** | `01_analisis_semantico.md` | **E1** | Diagnóstico consultivo, requisitos `R01`–`R08`, reglas `RN01`–`RN05` y decisiones `D01`–`D03`. |
 | **Fase 1** | `02_catalogo_conceptual.md` | **E2** | Catálogo justificado de 14 entidades y especificación textual en notación **Chen**. |
-| **Fase 1** | `03_diagrama_conceptual.puml` / `.png` | **E3** | Diagrama conceptual en notación **Crow's Foot** (Pata de Cuervo). |
+| **Fase 1** | `03_diagrama_conceptual.puml` / `.png` | **E3** | Diagrama conceptual Entidad–Relación en notación formal **Chen** (sin claves foráneas). |
 | **Fase 1** | `04_trazabilidad_conceptual.csv` | **E4** | Matriz de trazabilidad conceptual. |
 | **Fase 1** | `Fase_1_Especificacion_y_Modelo_Conceptual.docx` | Doc | Entregable consolidado en Word de la Fase 1. |
 | **Fase 2** | `05_modelo_logico.md` | **E5** | Esquema relacional lógico de 14 tablas independiente del SGBD. |
 | **Fase 2** | `06_normalizacion.md` | **E6** | Demostración formal de 1FN, 2FN y 3FN y anomalías prevenidas. |
-| **Fase 2** | `07_diagrama_logico.puml` / `.png` | **E7** | Diagrama relacional lógico con PK, FK y cardinalidades. |
+| **Fase 2** | `07_diagrama_logico.puml` / `.png` | **E7** | Diagrama relacional lógico en notación **Crow's Foot** con PK, FK, UQ y cardinalidades. |
 | **Fase 2** | `08_trazabilidad_logica.csv` | **E8** | Matriz de trazabilidad lógica. |
 | **Fase 2** | `Fase_2_Diseno_Logico_y_Normalizacion.docx` | Doc | Entregable consolidado en Word de la Fase 2. |
 | **Fase 3** | `09_diccionario_fisico.csv` | **E9** | Diccionario físico de las 89 columnas en MariaDB con `CHECK`, FK y `COMMENT`. |
 | **Fase 3** | `10_especificacion_fisica.md` | **E10** | Configuración física, 4 niveles de creación y 18 índices secundarios. |
 | **Fase 3** | `11_verificacion_previa.md` | **E11** | Verificación técnica del entorno XAMPP local. |
-| **DDL** | `12a_inventario_documentacion.csv` | **E17** | Inventario documental de los 244 objetos del esquema. |
+| **DDL** | `12a_inventario_documentacion.csv` | **E17** | Inventario documental de los 251 objetos del esquema. |
 | **DDL** | `12_creacion_esquema_mariadb.sql` | **E17** | Script DDL estructural 100 % documentado con `COMMENT` nativos. |
 | **DDL** | `12b_migracion_solo_comentarios_PENDIENTE.md` | **E18** | Protocolo de migración documental bajo Regla R15. |
 | **DDL** | `12c_mejoras_diseno_no_aplicadas.md` | **E20** | Reporte separado de mejoras futuras respetando inmutabilidad R14. |
-| **DDL** | `12d_objetos_programables_mariadb.sql` | **E17** | Implementación de 1 UDF, 9 Triggers, 2 Procedimientos y 3 Vistas. |
+| **DDL** | `12d_objetos_programables_mariadb.sql` | **E17** | Implementación de 2 UDFs, 12 Triggers, 3 Procedimientos y 3 Vistas. |
 | **DDL** | `13_verificaciones_estructura_mariadb.sql` | **E19** | Consultas de auditoría contra `INFORMATION_SCHEMA` y `SHOW CREATE TABLE`. |
 | **DDL** | `13a_comparacion_documental.md` | **E19** | Evidencia real de verificación del catálogo en SGBD. |
 | **Fase 4** | `14_generador_datos.py` | **E12** | Generador reproducible en Python (`SEED = 20261115`). |
-| **Fase 4** | `14_carga_datos_sinteticos_mariadb.sql` | **E12** | DML puro e independiente con **25.951 registros sintéticos**. |
+| **Fase 4** | `14_carga_datos_sinteticos_mariadb.sql` | **E12** | DML puro e independiente con **25.951 registros sintéticos** en las 5 áreas nucleares. |
 | **Fase 4** | `14a_plan_volumen_y_perfil_sintetico.md` | **E13** | Plan de volumen, justificación de cardinalidades y tamaño en disco (`15,24 MB`). |
 | **Fase 4** | `15_verificaciones_carga_mariadb.sql` | **E14** | Auditoría post-carga (conteos, 0 huérfanos, 0 duplicados, $k$-anonimato). |
-| **Fase 5** | `16_consultas_validacion_mariadb.sql` | **E15** | 12 consultas analíticas diferenciadas (`C01`–`C12`). |
-| **Fase 5** | `17_plan_pruebas_y_rendimiento.md` | **E16** | 13 pruebas positivas/negativas ejecutadas y 4 planes `EXPLAIN` medidos. |
+| **Seguridad**| `15b_roles_y_seguridad_mariadb.sql` | **E14** | Implementación de 4 roles nativos de MariaDB, 4 usuarios ficticios y `GRANT`/`REVOKE`. |
+| **Fase 5** | `16_consultas_validacion_mariadb.sql` | **E15** | **15 consultas analíticas diferenciadas (`C01`–`C15`)** cubriendo los Capítulos 2 a 7. |
+| **Fase 5** | `17_plan_pruebas_y_rendimiento.md` | **E16** | **16 pruebas funcionales + 8 pruebas RBAC por rol** y 4 planes `EXPLAIN` medidos. |
 | **Fase 6** | `18_auditoria_final_y_defensa.md` | Auditoría | Auditoría final, tabla `E1`–`E20`, uso crítico de IA y 5 preguntas de defensa oral. |
 | **Fase 6** | `18a_trazabilidad_completa.csv` | Matriz | Matriz de trazabilidad extremo a extremo. |
 | **Entrega** | `19_Memoria_Tecnica_Final.pdf` / `.docx` | **Memoria** | **Memoria Técnica Final consolidada en PDF (14 páginas) y Word editable.** |

@@ -1,7 +1,7 @@
 # 01 · Análisis Semántico y Diagnóstico Consultivo (Fase 1)
 
 **Proyecto:** Repositorio de Evolución Saber 11, Evaluaciones Internas (SIEE), Simulacros y Planes de Mejoramiento (Santa Marta)  
-**Estado:** PROPUESTO (Pendiente de aprobación de Fase 1)
+**Estado:** APROBADO (Fase 1 validada e implementada hasta Fase 6 · `PROBADO EN SGBD`)
 
 ---
 
@@ -28,7 +28,7 @@
   4. ¿Qué relación se observa entre simulacros, planes y resultados posteriores?
 
 ### B. Inferencias, Supuestos por Validar y Riesgos (Regla R2 y R9)
-* **Supuesto S01 (Minimización en `ESTUDIANTE_SEUDONIMO`):** Se conservan únicamente `id_estudiante_hash` e `id_cohorte`, eliminando `genero_declarado` y `estrato_socioeconomico` del borrador previo para reducir el riesgo de reidentificación en grupos pequeños (R9). *Pendiente de aprobación.*
+* **Supuesto S01 (Minimización en `ESTUDIANTE_SEUDONIMO`):** Se conservan únicamente `id_estudiante_hash` e `id_cohorte`, eliminando `genero_declarado` y `estrato_socioeconomico` del borrador previo para reducir el riesgo de reidentificación en grupos pequeños (R9). *Aprobado (Decisión D02).*
 * **Supuesto S02 (Atributos institucionales de contexto):** Campos como `comuna_localidad`, `sector`, `calendario` y `jornada` en institución/cohorte no figuran literalmente en el enunciado, pero se conservan como atributos de caracterización territorial en Santa Marta.
 * **Supuesto S03 (Umbral mínimo configurable):** El tamaño mínimo de grupo ($k$) se modela como parámetro configurable (valor inicial sugerido de ejemplo: `10`, no regla fija del enunciado).
 * **Supuesto S04 (Alcance mixto de resultados):** Se separan los resultados individuales seudónimos (`RESULTADO_EVALUACION`) de los reportes consolidados cuando no existan microdatos (`RESULTADO_AGREGADO_IE`), evitando mezclar conteos individuales y agregados en una misma suma.

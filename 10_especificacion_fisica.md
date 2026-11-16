@@ -1,8 +1,8 @@
-# 10 · Especificación Física del Esquema (Fase 3 · MariaDB 10.11.16 en XAMPP)
+# 10 · Especificación Física del Esquema (Fase 3 · MariaDB 10.4.32 / 10.11 LTS en XAMPP)
 
 **Proyecto:** Repositorio Saber 11, SIEE, Simulacros y Planes de Mejoramiento (Santa Marta)  
-**Motor y Versión Confirmados:** `10.11.16-MariaDB` (XAMPP 8.3.36 for Win64 on AMD64)  
-**Estado:** PROPUESTO / REVISADO ESTÁTICAMENTE (Sin ejecutar aún DDL en servidor)
+**Motor y Versión Confirmados:** `10.4.32-MariaDB` (XAMPP Win64 on AMD64, compatible 10.4+ y 10.11 LTS)  
+**Estado:** APROBADO / PROBADO EN SGBD (Implementado y verificado en servidor MariaDB local)
 
 ---
 
@@ -71,7 +71,7 @@ En InnoDB, cada `PRIMARY KEY` y cada `UNIQUE` generan su propio índice B-Tree. 
 | :--- | :--- | :--- | :--- |
 | `institucion_educativa` | `idx_ie_comuna` | `(comuna_localidad)` | Filtro territorial por comuna en Santa Marta. |
 | `cohorte` | `idx_cohorte_anio` | `(anio_lectivo)` | Agrupación interanual en consultas Q1 y Q3 (`codigo_dane` ya es prefijo de `uq_cohorte_ie_anio_jornada`). |
-| `transformacion_escala` | `idx_trans_escala_destino` | `(id_escala_destino)` | Soporte de FK y búsqueda de conversión hacia escala destino (`id_escala_origen` ya es prefijo de `uq_trans_origen_destino_vig`). |
+| `transformacion_escala` | `idx_trans_escala_destino` | `(id_escala_destino)` | Soporte de FK y búsqueda de conversión hacia escala destino (`id_escala_origen` ya es prefijo de `uq_trans_origen_destino_fact`). |
 | `instrumento_evaluacion` | `idx_inst_escala` | `(id_escala)` | Soporte de FK hacia `escala_evaluacion`. |
 | `instrumento_evaluacion` | `idx_inst_tipo_periodo` | `(tipo_instrumento, periodo_aplicacion)` | Filtro rápido de simulacros vs. Saber 11 vs. SIEE por periodo (Q1, Q4). |
 | `promedio_nacional_ref` | `idx_ref_area` | `(id_area)` | Soporte de FK y cruce por área en Q2 (`anio_vigencia` es prefijo de `uq_ref_anio_area_esc_fte`). |

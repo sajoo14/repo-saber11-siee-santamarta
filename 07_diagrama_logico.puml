@@ -56,10 +56,10 @@ entity "TRANSFORMACION_ESCALA" as TRANS {
     --
     * id_escala_origen : Entero <<FK, UQ1>>
     * id_escala_destino : Entero <<FK, UQ1>>
-    * factor_multiplicador : Decimal(10,6)
-    * constante_desplazamiento : Decimal(10,4)
+    * factor_multiplicador : Decimal(10,6) <<UQ1>>
+    * constante_desplazamiento : Decimal(10,4) <<UQ1>>
     * metodo_justificacion : TextoLargo
-    * vigente : Booleano <<UQ1>>
+    * vigente : Booleano
 }
 
 entity "INSTRUMENTO_EVALUACION" as INST {
@@ -121,9 +121,9 @@ entity "PROMEDIO_NACIONAL_REF" as REF {
 entity "PLAN_MEJORAMIENTO" as PLAN {
     * id_plan : Entero <<PK>>
     --
-    * codigo_dane : Texto(12) <<FK>>
-    * id_area : Entero <<FK>>
-    * anio_implementacion : Entero
+    * codigo_dane : Texto(12) <<FK, UQ1>>
+    * id_area : Entero <<FK, UQ1>>
+    * anio_implementacion : Entero <<UQ1>>
     * titulo_plan : Texto(150)
     * diagnostico_base : TextoLargo
     * meta_cuantitativa : Decimal(6,2)
@@ -133,9 +133,9 @@ entity "PLAN_MEJORAMIENTO" as PLAN {
 entity "SEGUIMIENTO_ACTIVIDAD_PLAN" as SEG {
     * id_seguimiento : Entero <<PK>>
     --
-    * id_plan : Entero <<FK>>
-    * nombre_actividad : Texto(150)
-    * fecha_seguimiento : Fecha
+    * id_plan : Entero <<FK, UQ1>>
+    * nombre_actividad : Texto(150) <<UQ1>>
+    * fecha_seguimiento : Fecha <<UQ1>>
     * porcentaje_avance_corte : Decimal(5,2)
     o observaciones : TextoLargo
     * estado_actividad : Texto(20)
@@ -176,6 +176,6 @@ AREA ||--o{ RES_AG : "id_area"
 AREA ||--o{ REF : "id_area"
 AREA ||--o{ PLAN : "id_area"
 EST ||--o{ RES : "id_estudiante_hash"
-PLAN ||--|{ SEG : "id_plan"
+PLAN ||--o{ SEG : "id_plan"
 
 @enduml

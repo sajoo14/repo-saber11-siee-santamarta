@@ -6,19 +6,25 @@
  * BASE DE DATOS:  repo_saber_siee_sm
  * FECHA:          2026-11-15
  * AUTORÍA:        Trabajo asistido por IA (Metodología Vibe Coding Supervisado v3.0)
- * ALCANCE:        Capa de programabilidad obligatoria de la Guía del Curso y de la
- *                 Sección 5 de 10_especificacion_fisica.md:
- *                   - 1 Función Definida por el Usuario (UDF): fn_transformar_puntaje (RN04)
- *                   - 9 Triggers de Integridad Cruzada e Inmutabilidad (RN03, RN05):
- *                       * trg_res_validar_rango_ins
+ * ALCANCE:        Capa de programabilidad completa (supera los mínimos de la Guía General
+ *                 y de la Matriz de los 12 Capítulos de Unimagdalena):
+ *                   - 2 Funciones Definidas por el Usuario (UDFs):
+ *                       * fn_transformar_puntaje (RN04, R07)
+ *                       * fn_clasificar_brecha_nacional (RN04, R04, R08)
+ *                   - 12 Triggers de Integridad, Coherencia Temporal, Inmutabilidad y Auditoría:
+ *                       * trg_res_validar_rango_ins (rango + decimales + coherencia temporal)
  *                       * trg_resag_validar_rango_ins
  *                       * trg_ref_validar_rango_ins
+ *                       * trg_trans_unica_vigente_ins (control de única versión vigente = 1)
  *                       * trg_res_inmutabilidad_upd / trg_res_inmutabilidad_del
  *                       * trg_resag_inmutabilidad_upd / trg_resag_inmutabilidad_del
  *                       * trg_seg_inmutabilidad_upd / trg_seg_inmutabilidad_del
- *                   - 2 Procedimientos Almacenados Transaccionales (ACID + Handlers):
+ *                       * trg_param_auditoria_upd (validación k >= 5 y sello de auditoría)
+ *                       * trg_plan_auditoria_upd (bitácora automática de cambios de meta en plan)
+ *                   - 3 Procedimientos Almacenados Transaccionales (ACID + Handlers):
  *                       * sp_registrar_seguimiento_plan (R06, RN03)
  *                       * sp_registrar_apoyo_institucional (R05, R01)
+ *                       * sp_actualizar_parametro_sistema (R07, RN02, RN03)
  *                   - 3 Vistas Analíticas con GROUP BY y HAVING (RN02, RN04, Q1–Q4):
  *                       * vw_evolucion_ie_area_anio
  *                       * vw_brecha_promedio_nacional
@@ -38,9 +44,13 @@ DROP VIEW IF EXISTS vw_impacto_simulacros_planes;
 DROP VIEW IF EXISTS vw_brecha_promedio_nacional;
 DROP VIEW IF EXISTS vw_evolucion_ie_area_anio;
 
+DROP PROCEDURE IF EXISTS sp_actualizar_parametro_sistema;
 DROP PROCEDURE IF EXISTS sp_registrar_apoyo_institucional;
 DROP PROCEDURE IF EXISTS sp_registrar_seguimiento_plan;
 
+DROP TRIGGER IF EXISTS trg_plan_auditoria_upd;
+DROP TRIGGER IF EXISTS trg_param_auditoria_upd;
+DROP TRIGGER IF EXISTS trg_trans_unica_vigente_ins;
 DROP TRIGGER IF EXISTS trg_seg_inmutabilidad_del;
 DROP TRIGGER IF EXISTS trg_seg_inmutabilidad_upd;
 DROP TRIGGER IF EXISTS trg_resag_inmutabilidad_del;
@@ -51,19 +61,23 @@ DROP TRIGGER IF EXISTS trg_ref_validar_rango_ins;
 DROP TRIGGER IF EXISTS trg_resag_validar_rango_ins;
 DROP TRIGGER IF EXISTS trg_res_validar_rango_ins;
 
+DROP FUNCTION IF EXISTS fn_clasificar_brecha_nacional;
 DROP FUNCTION IF EXISTS fn_transformar_puntaje;
 
 DELIMITER $$
 
 /* =====================================================================================
- * 1. FUNCIÓN DEFINIDA POR EL USUARIO (UDF) — Regla RN04 y Requisito R07
- * =====================================================================================
- * Propósito: Homologar un puntaje desde p_escala_origen hacia p_escala_destino aplicando
- *            exclusivamente una regla vigente y justificada en transformacion_escala:
- *            P_dest = ROUND(p_puntaje * factor_multiplicador + constante_desplazamiento, 2).
- *            Si las escalas son idénticas retorna el mismo puntaje; si son distintas y
- *            NO existe regla vigente, retorna NULL para impedir restas arbitrarias (RN04).
+ * 1. FUNCIONES DEFINIDAS POR EL USUARIO (UDFs) — Regla RN04 y Requisitos R04, R07, R08
  * ===================================================================================== */
+
+-- -------------------------------------------------------------------------------------
+-- UDF 1.1: fn_transformar_puntaje (RN04, R07)
+-- Propósito: Homologar un puntaje desde p_escala_origen hacia p_escala_destino aplicando
+--            exclusivamente una regla vigente y justificada en transformacion_escala:
+--            P_dest = ROUND(p_puntaje * factor_multiplicador + constante_desplazamiento, 2).
+--            Si las escalas son idénticas retorna el mismo puntaje; si son distintas y
+--            NO existe regla vigente, retorna NULL para impedir restas arbitrarias (RN04).
+-- -------------------------------------------------------------------------------------
 CREATE FUNCTION fn_transformar_puntaje(
     p_puntaje        DECIMAL(6,2),
     p_escala_origen  INT UNSIGNED,
@@ -104,26 +118,61 @@ BEGIN
 END$$
 
 
+-- -------------------------------------------------------------------------------------
+-- UDF 1.2: fn_clasificar_brecha_nacional (RN04, R04, R08)
+-- Propósito: Homologar el puntaje promedio institucional a la escala del referente
+--            nacional mediante fn_transformar_puntaje y clasificar semánticamente la
+--            magnitud de la brecha frente al promedio nacional.
+-- -------------------------------------------------------------------------------------
+CREATE FUNCTION fn_clasificar_brecha_nacional(
+    p_puntaje_ie       DECIMAL(6,2),
+    p_puntaje_nacional DECIMAL(6,2),
+    p_escala_ie        INT UNSIGNED,
+    p_escala_nacional  INT UNSIGNED
+)
+RETURNS VARCHAR(35)
+READS SQL DATA
+COMMENT 'Homologa escalas y clasifica la brecha de la IE frente al referente nacional (R04 RN04).'
+BEGIN
+    DECLARE v_homologado DECIMAL(6,2);
+    DECLARE v_brecha     DECIMAL(6,2);
+
+    SET v_homologado = fn_transformar_puntaje(p_puntaje_ie, p_escala_ie, p_escala_nacional);
+
+    IF v_homologado IS NULL OR p_puntaje_nacional IS NULL THEN
+        RETURN 'ESCALAS_INCOMPATIBLES_RN04';
+    END IF;
+
+    SET v_brecha = ROUND(v_homologado - p_puntaje_nacional, 2);
+
+    IF v_brecha >= 2.00 THEN
+        RETURN 'SUPERIOR_AL_NACIONAL';
+    ELSEIF v_brecha >= -1.99 THEN
+        RETURN 'EN_PARIDAD_NACIONAL';
+    ELSEIF v_brecha >= -7.99 THEN
+        RETURN 'REZAGO_MODERADO';
+    ELSE
+        RETURN 'REZAGO_CRITICO';
+    END IF;
+END$$
+
+
 /* =====================================================================================
- * 2. TRIGGERS DE VALIDACIÓN DE RANGO SEGÚN ESCALA — Regla RN05 y Requisito R02
- * =====================================================================================
- * Justificación técnica: En MariaDB una restricción CHECK no permite consultar otra
- * tabla (escala_evaluacion). Estos triggers verifican antes de insertar que el puntaje
- * esté dentro de [valor_minimo, valor_maximo] y respete permite_decimales.
+ * 2. TRIGGERS DE VALIDACIÓN DE RANGO, COHERENCIA TEMPORAL Y UNICIDAD DE VIGENCIA
  * ===================================================================================== */
 
--- Trigger 2.1: Validación de rango y decimales en microdatos (resultado_evaluacion)
+-- Trigger 2.1: Validación de rango, decimales y coherencia temporal en microdatos (resultado_evaluacion)
 CREATE TRIGGER trg_res_validar_rango_ins
 BEFORE INSERT ON resultado_evaluacion
 FOR EACH ROW
 BEGIN
-    DECLARE v_min       DECIMAL(6,2);
-    DECLARE v_max       DECIMAL(6,2);
-    DECLARE v_decimales TINYINT(1);
-    DECLARE v_nombre    VARCHAR(60);
+    DECLARE v_min          DECIMAL(6,2);
+    DECLARE v_max          DECIMAL(6,2);
+    DECLARE v_decimales    TINYINT(1);
+    DECLARE v_anio_cohorte SMALLINT UNSIGNED;
 
-    SELECT e.valor_minimo, e.valor_maximo, e.permite_decimales, e.nombre_escala
-      INTO v_min, v_max, v_decimales, v_nombre
+    SELECT e.valor_minimo, e.valor_maximo, e.permite_decimales
+      INTO v_min, v_max, v_decimales
       FROM instrumento_evaluacion i
       INNER JOIN escala_evaluacion e ON e.id_escala = i.id_escala
      WHERE i.id_instrumento = NEW.id_instrumento;
@@ -136,6 +185,18 @@ BEGIN
     IF v_decimales = 0 AND NEW.puntaje_obtenido <> FLOOR(NEW.puntaje_obtenido) THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'RN05 Violada: La escala del instrumento no admite fracciones decimales en puntaje_obtenido.';
+    END IF;
+
+    -- Validación de coherencia temporal entre el año de presentación y el año lectivo de la cohorte del estudiante
+    SELECT c.anio_lectivo
+      INTO v_anio_cohorte
+      FROM estudiante_seudonimo es
+      INNER JOIN cohorte c ON c.id_cohorte = es.id_cohorte
+     WHERE es.id_estudiante_hash = NEW.id_estudiante_hash;
+
+    IF v_anio_cohorte IS NOT NULL AND YEAR(NEW.fecha_presentacion) <> v_anio_cohorte THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Coherencia Temporal Violada: El anio de fecha_presentacion no coincide con el anio_lectivo de la cohorte del estudiante.';
     END IF;
 END$$
 
@@ -178,13 +239,31 @@ BEGIN
     END IF;
 END$$
 
+-- Trigger 2.4: Garantía de única versión vigente (vigente = 1) por par de escalas en transformacion_escala
+CREATE TRIGGER trg_trans_unica_vigente_ins
+BEFORE INSERT ON transformacion_escala
+FOR EACH ROW
+BEGIN
+    DECLARE v_activas INT DEFAULT 0;
+
+    IF NEW.vigente = 1 THEN
+        SELECT COUNT(*)
+          INTO v_activas
+          FROM transformacion_escala
+         WHERE id_escala_origen  = NEW.id_escala_origen
+           AND id_escala_destino = NEW.id_escala_destino
+           AND vigente = 1;
+
+        IF v_activas > 0 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'RN04 Violada: Ya existe una regla de transformacion vigente=1 para ese par de escalas; desactive la previa antes de activar una nueva.';
+        END IF;
+    END IF;
+END$$
+
 
 /* =====================================================================================
- * 3. TRIGGERS DE INMUTABILIDAD HISTÓRICA — Regla RN03
- * =====================================================================================
- * Propósito: Garantizar que los resultados históricos (individuales y agregados) y los
- *            cortes de seguimiento de los planes de mejoramiento se conserven sin
- *            sobrescribir ni eliminar registros.
+ * 3. TRIGGERS DE INMUTABILIDAD HISTÓRICA Y AUDITORÍA DE CAMBIOS — Regla RN03 y RN02
  * ===================================================================================== */
 
 -- Trigger 3.1: Bloqueo de UPDATE en resultado_evaluacion
@@ -241,6 +320,62 @@ BEGIN
         SET MESSAGE_TEXT = 'RN03 Violada: Prohibido eliminar cortes historicos de seguimiento_actividad_plan.';
 END$$
 
+-- Trigger 3.7: Validación de privacidad y sello de auditoría al actualizar parametro_sistema (RN02, RN03)
+CREATE TRIGGER trg_param_auditoria_upd
+BEFORE UPDATE ON parametro_sistema
+FOR EACH ROW
+BEGIN
+    IF OLD.clave_parametro = 'UMBRAL_MINIMO_K' AND CAST(NEW.valor_parametro AS SIGNED) < 5 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'RN02 Violada: El parametro UMBRAL_MINIMO_K no puede ser inferior a 5 evaluados por proteccion de k-anonimato estudiantil.';
+    END IF;
+
+    SET NEW.fecha_actualizacion = CURRENT_TIMESTAMP;
+    SET NEW.descripcion = LEFT(
+        CONCAT(
+            OLD.descripcion,
+            ' [Auditado por ', CURRENT_USER(), ': ', OLD.valor_parametro, ' -> ', NEW.valor_parametro, ']'
+        ),
+        250
+    );
+END$$
+
+-- Trigger 3.8: Bitácora automática de auditoría al modificar meta_cuantitativa en plan_mejoramiento (R06, RN03)
+CREATE TRIGGER trg_plan_auditoria_upd
+AFTER UPDATE ON plan_mejoramiento
+FOR EACH ROW
+BEGIN
+    DECLARE v_ultimo_avance DECIMAL(5,2) DEFAULT 0.00;
+
+    IF OLD.meta_cuantitativa <> NEW.meta_cuantitativa THEN
+        SELECT COALESCE(MAX(porcentaje_avance_corte), 0.00)
+          INTO v_ultimo_avance
+          FROM seguimiento_actividad_plan
+         WHERE id_plan = NEW.id_plan;
+
+        INSERT INTO seguimiento_actividad_plan (
+            id_plan,
+            nombre_actividad,
+            fecha_seguimiento,
+            porcentaje_avance_corte,
+            observaciones,
+            estado_actividad
+        ) VALUES (
+            NEW.id_plan,
+            CONCAT('AUDITORIA_CAMBIO_META_', DATE_FORMAT(NOW(6), '%H%i%s%f')),
+            CURDATE(),
+            v_ultimo_avance,
+            CONCAT(
+                'Registro automatico de auditoria [Usuario: ', CURRENT_USER(),
+                ']: meta_cuantitativa ajustada de ', OLD.meta_cuantitativa,
+                ' a ', NEW.meta_cuantitativa,
+                ' (estado_plan: ', OLD.estado_plan, ' -> ', NEW.estado_plan, ').'
+            ),
+            'EN_PROGRESO'
+        );
+    END IF;
+END$$
+
 
 /* =====================================================================================
  * 4. PROCEDIMIENTOS ALMACENADOS CON CONTROL TRANSACCIONAL ACID (COMMIT / ROLLBACK)
@@ -268,7 +403,6 @@ BEGIN
     DECLARE v_estado_actual_plan VARCHAR(20);
     DECLARE v_promedio_avance    DECIMAL(5,2);
 
-    -- Manejador de excepciones: deshace toda la transacción ante cualquier error SQL o de regla de negocio
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -415,6 +549,47 @@ BEGIN
     COMMIT;
 END$$
 
+
+-- -------------------------------------------------------------------------------------
+-- Procedimiento 4.3: sp_actualizar_parametro_sistema (R07, RN02, RN03)
+-- Propósito: Actualizar un parámetro de gobernanza en parametro_sistema bajo control
+--            transaccional ACID, disparando trg_param_auditoria_upd y devolviendo el
+--            valor anterior junto con el nuevo valor vigente.
+-- -------------------------------------------------------------------------------------
+CREATE PROCEDURE sp_actualizar_parametro_sistema(
+    IN  p_clave_parametro VARCHAR(50),
+    IN  p_nuevo_valor     VARCHAR(100),
+    OUT p_valor_anterior  VARCHAR(100)
+)
+MODIFIES SQL DATA
+COMMENT 'Actualiza un parametro de gobernanza con bloqueo FOR UPDATE validacion de k-anonimato y sello de auditoria.'
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    SELECT valor_parametro
+      INTO p_valor_anterior
+      FROM parametro_sistema
+     WHERE clave_parametro = p_clave_parametro
+       FOR UPDATE;
+
+    IF p_valor_anterior IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'R07 Error: La clave_parametro indicada no existe en parametro_sistema.';
+    END IF;
+
+    UPDATE parametro_sistema
+       SET valor_parametro = p_nuevo_valor
+     WHERE clave_parametro = p_clave_parametro;
+
+    COMMIT;
+END$$
+
 DELIMITER ;
 
 
@@ -427,10 +602,6 @@ DELIMITER ;
 
 -- -------------------------------------------------------------------------------------
 -- Vista 5.1: vw_evolucion_ie_area_anio (Consulta Q1 + Regla RN02 de k-anonimato)
--- Propósito: Mostrar la evolución del puntaje promedio, desviación, mínimo y máximo por
---            institución educativa, año lectivo, área e instrumento a partir de los
---            microdatos seudónimos, suprimiendo mediante HAVING cualquier grupo cuyo
---            tamaño sea inferior al parámetro configurable UMBRAL_MINIMO_K (RN02).
 -- -------------------------------------------------------------------------------------
 CREATE OR REPLACE VIEW vw_evolucion_ie_area_anio AS
 SELECT
@@ -448,11 +619,11 @@ SELECT
     e.id_escala,
     e.nombre_escala,
     e.unidad_medida,
-    COUNT(re.id_estudiante_hash)        AS total_estudiantes_evaluados,
-    ROUND(AVG(re.puntaje_obtenido), 2)  AS puntaje_promedio_ie,
+    COUNT(re.id_estudiante_hash)              AS total_estudiantes_evaluados,
+    ROUND(AVG(re.puntaje_obtenido), 2)        AS puntaje_promedio_ie,
     ROUND(STDDEV_POP(re.puntaje_obtenido), 2) AS desviacion_estandar_ie,
-    MIN(re.puntaje_obtenido)            AS puntaje_minimo_ie,
-    MAX(re.puntaje_obtenido)            AS puntaje_maximo_ie
+    MIN(re.puntaje_obtenido)                  AS puntaje_minimo_ie,
+    MAX(re.puntaje_obtenido)                  AS puntaje_maximo_ie
 FROM resultado_evaluacion re
 INNER JOIN estudiante_seudonimo es   ON es.id_estudiante_hash = re.id_estudiante_hash
 INNER JOIN cohorte c                 ON c.id_cohorte          = es.id_cohorte
@@ -486,10 +657,6 @@ HAVING COUNT(re.id_estudiante_hash) >= COALESCE(
 
 -- -------------------------------------------------------------------------------------
 -- Vista 5.2: vw_brecha_promedio_nacional (Consulta Q2 + Reglas RN02 y RN04)
--- Propósito: Comparar el resultado promedio de cada institución frente al promedio
---            nacional de referencia para el mismo año y área, garantizando que la resta
---            solo se realice en la misma escala o mediante fn_transformar_puntaje (RN04)
---            y aplicando el umbral mínimo k (RN02).
 -- -------------------------------------------------------------------------------------
 CREATE OR REPLACE VIEW vw_brecha_promedio_nacional AS
 SELECT
@@ -518,6 +685,12 @@ SELECT
         ) - pnr.puntaje_promedio,
         2
     )                                                                       AS brecha_frente_nacional,
+    fn_clasificar_brecha_nacional(
+        ROUND(AVG(re.puntaje_obtenido), 2),
+        pnr.puntaje_promedio,
+        i.id_escala,
+        pnr.id_escala
+    )                                                                       AS clasificacion_brecha,
     pnr.fuente_oficial
 FROM resultado_evaluacion re
 INNER JOIN estudiante_seudonimo es   ON es.id_estudiante_hash = re.id_estudiante_hash
@@ -557,9 +730,6 @@ AND promedio_colegio_homologado IS NOT NULL;
 
 -- -------------------------------------------------------------------------------------
 -- Vista 5.3: vw_impacto_simulacros_planes (Consultas Q3 y Q4 + Regla RN02)
--- Propósito: Relacionar por institución, año y área el desempeño en simulacros y en la
---            prueba oficial Saber 11 junto con la inversión en apoyos institucionales,
---            metas y porcentaje de avance de los planes de mejoramiento.
 -- -------------------------------------------------------------------------------------
 CREATE OR REPLACE VIEW vw_impacto_simulacros_planes AS
 SELECT

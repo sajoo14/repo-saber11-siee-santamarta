@@ -135,15 +135,15 @@ para("Supuestos y riesgos declarados: S01–S04 (minimización, atributos de con
      "y riesgos R-01 (doble conteo micro vs. agregado) y R-02 (asociación no es causalidad). Detalle en 01_analisis_semantico.md.", italic=True)
 
 # ---------------------------------------------------------------- 3. Modelado
-h("3. Modelado conceptual y lógico y normalización")
-h("3.1 Diagrama conceptual (Crow's Foot — no es notación Chen)", 2)
+h("3. Modelado conceptual (Chen), modelo lógico (Crow's Foot) y normalización")
+h("3.1 Diagrama conceptual Entidad-Relación (Notación Formal Chen)", 2)
 if os.path.exists(P("03_diagrama_conceptual.png")):
-    doc.add_picture(P("03_diagrama_conceptual.png"), width=Cm(15.5))
-para("Fuente editable: 03_diagrama_conceptual.puml. La especificación textual en notación Chen está en 02_catalogo_conceptual.md.", italic=True)
-h("3.2 Diagrama relacional lógico", 2)
+    doc.add_picture(P("03_diagrama_conceptual.png"), width=Cm(16.0))
+para("Fuente editable: 03_diagrama_conceptual.puml (@startchen). Especificación en 02_catalogo_conceptual.md (rectángulos, rombos y óvalos sin claves foráneas).", italic=True)
+h("3.2 Diagrama relacional lógico (Notación Crow's Foot)", 2)
 if os.path.exists(P("07_diagrama_logico.png")):
-    doc.add_picture(P("07_diagrama_logico.png"), width=Cm(15.5))
-para("Fuente editable: 07_diagrama_logico.puml.", italic=True)
+    doc.add_picture(P("07_diagrama_logico.png"), width=Cm(16.0))
+para("Fuente editable: 07_diagrama_logico.puml (14 tablas, 89 columnas, 14 PK, 17 FK, 11 UNIQUE).", italic=True)
 h("3.3 Normalización (1FN, 2FN, 3FN)", 2)
 bullets(["1FN: atributos atómicos; los múltiples cortes de avance de un plan se desglosan en seguimiento_actividad_plan (sin columnas repetidas).",
          "2FN: en resultado_evaluacion, con PK compuesta (id_estudiante_hash, id_instrumento, id_area), todos los atributos no clave dependen de la clave completa; "
@@ -151,11 +151,12 @@ bullets(["1FN: atributos atómicos; los múltiples cortes de avance de un plan s
          "3FN: en el borrador de 11 tablas, promedio_nacional_ref incluía id_instrumento, creando la dependencia transitiva "
          "id_instrumento → id_escala. Se corrigió ligando el referente a (anio_vigencia, id_area, id_escala, fuente_oficial). "
          "Anomalía de inserción evitada: ya no hace falta crear un instrumento local para poder registrar un promedio nacional."])
-h("3.4 Relaciones N:M resueltas", 2)
-table(["Relación N:M", "Tabla intermedia", "Clave"], [
-    ["Estudiante – Instrumento – Área (ternaria)", "resultado_evaluacion", "PK compuesta de 3 columnas"],
-    ["Escala – Escala (recursiva)", "transformacion_escala", "UQ (id_escala_origen, id_escala_destino, vigente)"],
-    ["Institución – Área por año", "plan_mejoramiento", "PK id_plan; índice (codigo_dane, anio_implementacion)"]], [6, 4.5, 5.5])
+h("3.4 Relaciones N:M resueltas y claves candidatas UNIQUE", 2)
+table(["Relación N:M / Subordinada", "Tabla intermedia", "Clave Primaria y Alternativa (UNIQUE)"], [
+    ["Estudiante – Instrumento – Área (ternaria)", "resultado_evaluacion", "PK compuesta (id_estudiante_hash, id_instrumento, id_area)"],
+    ["Escala – Escala (recursiva)", "transformacion_escala", "PK id_transformacion; UQ (id_escala_origen, id_escala_destino, factor_multiplicador, constante_desplazamiento)"],
+    ["Institución – Área por año", "plan_mejoramiento", "PK id_plan; UQ (codigo_dane, id_area, anio_implementacion)"],
+    ["Cortes de seguimiento por plan", "seguimiento_actividad_plan", "PK id_seguimiento; UQ (id_plan, nombre_actividad, fecha_seguimiento)"]], [5.5, 4.2, 6.3])
 
 # ---------------------------------------------------------------- 4. Físico
 h("4. Diseño físico en MariaDB")
@@ -192,19 +193,24 @@ para(f"Total de columnas: {len(rows)}.")
 # ---------------------------------------------------------------- 6. Programables
 h("6. Objetos programables")
 table(["Tipo", "Objeto", "Función"], [
-    ["UDF", "fn_transformar_puntaje", "Homologa un puntaje entre escalas con la regla vigente (P_dest = m·P_orig + b); NULL si no existe regla (RN04)."],
-    ["Trigger", "trg_res_validar_rango_ins", "Valida rango [min, max] y decimales del puntaje individual según la escala del instrumento (RN05)."],
-    ["Trigger", "trg_resag_validar_rango_ins", "Ídem para promedios agregados."],
-    ["Trigger", "trg_ref_validar_rango_ins", "Ídem para promedios nacionales."],
+    ["UDF 1", "fn_transformar_puntaje", "Homologa un puntaje entre escalas con la regla vigente (P_dest = m·P_orig + b); NULL si no existe regla (RN04)."],
+    ["UDF 2", "fn_clasificar_brecha_nacional", "Homologa escalas y clasifica semánticamente la brecha de la IE frente al referente nacional (R04, RN04)."],
+    ["Trigger", "trg_res_validar_rango_ins", "Valida rango [min, max], decimales (RN05) y coherencia temporal año presentación vs. año cohorte."],
+    ["Trigger", "trg_resag_validar_rango_ins", "Valida rango [min, max] para promedios agregados institucionales (RN05)."],
+    ["Trigger", "trg_ref_validar_rango_ins", "Valida rango [min, max] para promedios nacionales de referencia (RN05)."],
+    ["Trigger", "trg_trans_unica_vigente_ins", "Garantiza a lo sumo una regla activa (vigente=1) por par de escalas permitiendo múltiples históricos."],
     ["Trigger", "trg_res_inmutabilidad_upd / _del", "Bloquean UPDATE y DELETE en resultado_evaluacion (RN03)."],
-    ["Trigger", "trg_resag_inmutabilidad_upd / _del", "Ídem en resultado_agregado_ie."],
-    ["Trigger", "trg_seg_inmutabilidad_upd / _del", "Ídem en seguimiento_actividad_plan."],
-    ["Procedimiento", "sp_registrar_seguimiento_plan", "Inserta un corte y actualiza el estado del plan en una transacción (EXIT HANDLER → ROLLBACK)."],
+    ["Trigger", "trg_resag_inmutabilidad_upd / _del", "Bloquean UPDATE y DELETE en resultado_agregado_ie (RN03)."],
+    ["Trigger", "trg_seg_inmutabilidad_upd / _del", "Bloquean UPDATE y DELETE en seguimiento_actividad_plan (RN03)."],
+    ["Trigger", "trg_param_auditoria_upd", "Valida UMBRAL_MINIMO_K >= 5 (RN02) y estampa sello de auditoría con CURRENT_USER(), OLD y NEW."],
+    ["Trigger", "trg_plan_auditoria_upd", "Registra traza automática inmutable en seguimiento_actividad_plan al modificar meta_cuantitativa."],
+    ["Procedimiento", "sp_registrar_seguimiento_plan", "Inserta un corte y actualiza el estado del plan en una transacción ACID (EXIT HANDLER → ROLLBACK)."],
     ["Procedimiento", "sp_registrar_apoyo_institucional", "Registra un apoyo validando institución activa y beneficiarios ≤ matriculados; ROLLBACK si falla."],
+    ["Procedimiento", "sp_actualizar_parametro_sistema", "Actualiza parámetros del sistema bajo bloqueo FOR UPDATE, validación de k-anonimato y auditoría."],
     ["Vista", "vw_evolucion_ie_area_anio", "Q1: evolución por institución/área/año; HAVING COUNT ≥ UMBRAL_MINIMO_K."],
-    ["Vista", "vw_brecha_promedio_nacional", "Q2: brecha frente al promedio nacional en igual escala o escala homologada."],
+    ["Vista", "vw_brecha_promedio_nacional", "Q2: brecha frente al promedio nacional en igual escala o escala homologada y su clasificación."],
     ["Vista", "vw_impacto_simulacros_planes", "Q3/Q4: simulacros, Saber 11, planes y apoyos; HAVING con umbral k."]], [2.4, 5.6, 8])
-para("Total: 1 UDF, 9 triggers, 2 procedimientos, 3 vistas (superan el mínimo de la guía: 1 / 2 / 2 / 3). "
+para("Total: 2 UDFs, 12 triggers, 3 procedimientos, 3 vistas (superan todos los mínimos del curso). "
      "Código completo en 12d_objetos_programables_mariadb.sql.")
 para("Nota de diseño: un CHECK de MariaDB solo evalúa columnas de la misma fila, por eso RN05 y RN03 requieren triggers; "
      "los CHECK del DDL solo imponen cotas estáticas (p. ej. puntaje ≥ 0).", italic=True)
@@ -230,33 +236,37 @@ para("Limitación: los datos son sintéticos con una tendencia de mejora interan
 
 # ---------------------------------------------------------------- 8. Consultas
 h("8. Consultas analíticas, pruebas y EXPLAIN")
-h("8.1 Consultas de validación (16_consultas_validacion_mariadb.sql)", 2)
-table(["ID", "Propósito", "Técnicas"], [
-    ["C01", "Q1: evolución por institución, área y año con variación interanual", "JOIN×6, GROUP BY, HAVING, LAG()"],
-    ["C02", "Q2: brecha frente al promedio nacional en la misma escala", "Vista + UDF"],
-    ["C03", "Q3: ranking de mayor mejora 2022→2024", "Autounión de vista"],
-    ["C04", "Q4: simulacro → Saber 11, plan, avance y apoyos", "Vista, LEFT JOIN"],
-    ["C05", "Desempeño por comuna/corregimiento", "GROUP BY, HAVING"],
-    ["C06", "Desconexión SIEE vs Saber 11 (SIEE homologado a 0–100)", "Autounión, UDF, HAVING"],
-    ["C07", "Caso límite: cohortes suprimidas por k-anonimato", "Subconsulta, HAVING"],
-    ["C08", "Caso límite: transformaciones vigentes, inactivas e inexistentes", "UDF, CROSS JOIN"],
-    ["C09", "Historial de 10.000 cortes de seguimiento", "GROUP BY, MIN/MAX"],
-    ["C10", "Consolidados sin doble conteo", "NOT EXISTS"],
-    ["C11", "Áreas sin planes de mejoramiento", "LEFT JOIN"],
-    ["C12", "Inversión por modalidad y cobertura de matrícula", "GROUP BY"]], [1.5, 9, 5.5])
+h("8.1 Consultas de validación (16_consultas_validacion_mariadb.sql — 15 consultas)", 2)
+table(["ID", "Propósito", "Técnicas (Capítulos 2 a 7)"], [
+    ["C01", "Q1: evolución por institución, área y año con variación interanual", "JOIN×6, GROUP BY, HAVING, LAG() (Cap. 2,3,5,6)"],
+    ["C02", "Q2: brecha frente al promedio nacional en la misma escala", "Vista + 2 UDFs (Cap. 3,5,12)"],
+    ["C03", "Q3: ranking de mayor mejora 2022→2024 sin empates planos", "Autounión de vista (Cap. 3,4,5)"],
+    ["C04", "Q4: simulacro → Saber 11, plan, avance y apoyos", "Vista, LEFT JOIN, subconsultas (Cap. 4,5)"],
+    ["C05", "Desempeño por comuna/corregimiento", "GROUP BY, HAVING (Cap. 3)"],
+    ["C06", "Desconexión SIEE vs Saber 11 (SIEE homologado a 0–100)", "Autounión, UDF, HAVING (Cap. 3,5,12)"],
+    ["C07", "Caso límite: cohortes suprimidas por k-anonimato", "Subconsulta, CASE, HAVING (Cap. 4,7)"],
+    ["C08", "Caso límite: transformaciones vigentes, inactivas e inexistentes", "UDF, CROSS JOIN, CASE (Cap. 5,7)"],
+    ["C09", "Historial de 10.000 cortes de seguimiento", "GROUP BY, MIN/MAX (Cap. 3,5)"],
+    ["C10", "Consolidados sin doble conteo", "NOT EXISTS correlacionada (Cap. 4)"],
+    ["C11", "Áreas sin planes de mejoramiento", "LEFT JOIN, CASE (Cap. 5,7)"],
+    ["C12", "Inversión por modalidad y cobertura de matrícula", "GROUP BY, agregaciones (Cap. 3)"],
+    ["C13", "Colegios con planes activos vs. subsidio de inscripción 2024", "Operaciones de conjunto EXCEPT y UNION (Cap. 6)"],
+    ["C14", "Matriz ejecutiva de las 5 áreas (MAT, LEC, SOC, NAT, ING) por comuna", "Pivoteo condicional CASE + LIMIT/OFFSET (Cap. 7)"],
+    ["C15", "Clasificación multi-área de brecha nacional 2024", "Segunda UDF fn_clasificar_brecha_nacional (Cap. 3,12)"]], [1.5, 8.5, 6])
 para("Error detectado y corregido durante la ejecución real: C06 usaba ORDER BY ABS(alias_agregado) y MariaDB respondió "
      "ERROR 1247 (reference to group function); se reescribió con la expresión agregada explícita.", italic=True)
 
-h("8.2 Pruebas de reglas de negocio (ejecutadas en MariaDB)", 2)
-table(["ID", "Regla", "Prueba", "Resultado observado"], [
+h("8.2 Pruebas de reglas de negocio y seguridad RBAC (ejecutadas en MariaDB)", 2)
+table(["ID", "Regla / Rol", "Prueba", "Resultado observado"], [
     ["N-01", "RN01", "Insertar 'TI_1082999888_JUAN_PEREZ' como hash", "ERROR 4025: CONSTRAINT chk_est_hash_hex failed"],
     ["N-03a", "RN03", "UPDATE de un puntaje histórico", "ERROR 1644 (45000): RN03 Violada … inmutables"],
     ["N-03b", "RN03", "DELETE de un corte de seguimiento", "ERROR 1644 (45000): RN03 Violada … Prohibido eliminar"],
     ["N-05a", "RN05", "Puntaje 150.00 en escala [0,100]", "ERROR 1644 (45000): RN05 Violada … fuera del rango"],
     ["N-05b", "RN05", "Puntaje 55.75 en escala entera", "ERROR 1644 (45000): RN05 Violada … no admite fracciones decimales"],
+    ["N-05c", "Temporal", "Examen con fecha 2019 en estudiante de cohorte 2022", "ERROR 1644 (45000): Coherencia Temporal Violada"],
     ["N-06", "R05", "Apoyo con 9999 beneficiarios (> matriculados)", "ERROR 1644 (45000): R05 Error … supera el total de matriculados"],
-    ["N-04", "RN04", "fn_transformar_puntaje(4.00, 6, 1) con regla inactiva", "NULL (bloqueado)"],
-    ["N-02", "RN02", "Cohortes con n=5 en vistas públicas", "0 apariciones; 3 detectadas en la tabla base"]], [1.5, 1.4, 6.6, 6.5])
+    ["N-07", "RN02", "SP actualizar UMBRAL_MINIMO_K a 3 (< 5)", "ERROR 1644 (45000): RN02 Violada … inferior a 5 evaluados"],
+    ["S-01 a S-04", "4 Roles RBAC", "8 pruebas positivas y negativas con usuarios de prueba", "4 accesos permitidos OK y 4 ERROR 1142 (command denied)"]], [1.8, 1.8, 6.2, 6.2])
 para("Tras las pruebas negativas los conteos se mantuvieron en 12.000 / 10.000 / 180 (resultado_evaluacion / seguimiento_actividad_plan / apoyo_institucional): "
      "ninguna prueba persistió datos. Las pruebas positivas P-01 a P-05 se verifican con 15_verificaciones_carga_mariadb.sql y las consultas C01–C12.")
 
@@ -279,49 +289,50 @@ table(["Req.", "Reglas", "Tablas / objetos DDL", "Evidencia de consulta o prueba
         x["Consulta_Prueba"][:130] + ("…" if len(x["Consulta_Prueba"]) > 130 else ""), x["Estado"]] for x in tr],
       [1.2, 2, 6.2, 5, 1.8], size=7.5)
 para("Matriz completa en 18a_trazabilidad_completa.csv. Auditoría detallada (normalización, seguridad, privacidad, coherencia temporal) y las 5 preguntas de defensa en 18_auditoria_final_y_defensa.md.")
-h("9.2 Control de acceso (PROPUESTO, no implementado)", 2)
-para("Estado: PROPUESTO. La base se probó con el usuario root local de XAMPP; no se crearon roles ni GRANT. Para un despliegue real se propone: "
-     "rol_analista_consulta con SELECT solo sobre las vistas vw_* (sin acceso a tablas base, para no eludir el umbral k); "
-     "rol_operador_academico con EXECUTE sobre los dos procedimientos; rol_administrador_datos sobre los catálogos.")
+h("9.2 Control de acceso basado en roles (RBAC — PROBADO EN SGBD)", 2)
+para("Estado: PROBADO EN SGBD (15b_roles_y_seguridad_mariadb.sql). Se crearon 4 roles nativos de MariaDB (rol_administrador_datos, "
+     "rol_operador_academico, rol_control_evaluacion y rol_auditor_consulta) y 4 cuentas ficticias de prueba, verificando 8 pruebas "
+     "positivas y negativas (S-01+ a S-04-). El rol auditor solo accede a las vistas públicas con k-anonimato y tiene denegado el SELECT "
+     "directo sobre estudiante_seudonimo y resultado_evaluacion.")
 h("9.3 Uso crítico de la IA — correcciones reales", 2)
 table(["Iteración", "Problema detectado", "Corrección"], [
     ["v1.0", "El borrador de 11 tablas guardaba género y estrato (riesgo de reidentificación) y ataba promedio_nacional_ref a id_instrumento (viola 3FN).",
      "Modelo de 14 tablas; decisiones D02 y D03."],
     ["v2.0", "Conteos estimados de memoria (82 columnas, 18 FK, 41 CHECK) no coincidían con el catálogo real.",
-     "Se contrastó con INFORMATION_SCHEMA: 89 columnas, 17 FK, 52 CHECK; se corrigieron 12_, 13_ y 13a_. "
-     "Se corrigieron también 11_, 12c_ y el HANDOFF (ver sección 10)."],
-    ["v3.0", "Error 1247 en C06; la vista de impacto multiplicaba filas al unir tablas derivadas antes de agrupar. "
-             "Además, el servidor no arrancó tras una parada abrupta (tablas Aria del sistema marcadas como crashed).",
-     "Se reescribieron C06 y la vista con subconsultas escalares; se reparó el catálogo con aria_chk y se recargó el esquema."]], [1.8, 8.2, 6])
+     "Se contrastó con INFORMATION_SCHEMA: 89 columnas, 17 FK, 52 CHECK; se corrigieron 12_, 13_ y 13a_."],
+    ["v3.0", "Error 1247 en C06; la vista de impacto multiplicaba filas al unir tablas derivadas antes de agrupar; tablas Aria del sistema marcadas como crashed.",
+     "Se reescribieron C06 y la vista con subconsultas escalares; se reparó el catálogo con aria_chk y se recargó el esquema."],
+    ["v4.0", "Revisión crítica docente: separar diagrama Chen de Crow's Foot; evitar booleano vigente en UNIQUE; agregar UNIQUE en planes/seguimientos, "
+             "triggers de auditoría, 2da UDF, 3er SP, 4 roles RBAC ejecutables y cubrir las 5 áreas y 15 consultas (conjuntos y pivoteo).",
+     "Se rediseñó 03_ en Chen; se crearon 11 UNIQUE, 2 UDFs, 3 SPs, 12 Triggers, 15b_roles_y_seguridad_mariadb.sql, microdatos en 5 áreas y 15 consultas."]], [1.8, 8.2, 6])
 
 # ---------------------------------------------------------------- 10. Conclusiones
 h("10. Conclusiones y limitaciones")
 para("Estado por categoría (Regla R8)", bold=True)
 table(["Estado", "Elementos"], [
-    ["PROBADO EN SGBD", "DDL (14 tablas, 89 columnas, 14 PK, 17 FK, 9 UNIQUE, 52 CHECK, 18 índices secundarios); 1 UDF, 9 triggers, 2 procedimientos, 3 vistas; "
-                        "carga de 25.951 filas; 12 consultas; pruebas negativas de reglas; 4 EXPLAIN con tiempos."],
-    ["REVISADO ESTÁTICAMENTE", "Modelos conceptual y lógico, normalización, diagramas, guía de migración documental (12b_), reporte de mejoras (12c_)."],
-    ["PROPUESTO", "Roles y permisos (sección 9.2)."]], [4.5, 11.5])
+    ["PROBADO EN SGBD", "DDL (14 tablas, 89 columnas, 14 PK, 17 FK, 11 UNIQUE, 52 CHECK, 18 índices secundarios); 2 UDFs, 12 triggers, 3 procedimientos, 3 vistas; "
+                        "4 roles RBAC con 8 pruebas de seguridad; carga de 25.951 filas en 5 áreas; 15 consultas (C01–C15); 16 pruebas de reglas; 4 EXPLAIN con tiempos."],
+    ["REVISADO ESTÁTICAMENTE", "Modelos conceptual (Chen) y lógico (Crow's Foot), normalización, guía de migración documental (12b_), reporte de mejoras (12c_)."],
+    ["PROPUESTO", "Ningún entregable obligatorio quedó pendiente en estado PROPUESTO."]], [4.5, 11.5])
 para("Limitaciones conocidas y honestas", bold=True)
-bullets(["Motor: la verificación se hizo en MariaDB 10.4.32 (la que tiene instalada XAMPP), no en 10.11.16 como decían los primeros documentos; no se usó sintaxis exclusiva de 10.11 pero no se probó allí.",
-         "Cifras corregidas: documentos redactados antes de cerrar el diseño (11_, 12c_ y el HANDOFF) decían «82 columnas» y «18 FK»; el catálogo real y 09_diccionario_fisico.csv tienen 89 columnas y 17 FK. Se corrigieron en esta entrega.",
-         "Los datos sintéticos tienen patrones impuestos (mejora de +3 puntos anuales); no permiten concluir nada sobre los resultados reales.",
-         "Rendimiento: una sola medición por consulta en equipo local; con 25.951 filas casi cualquier plan es rápido, por lo que no demuestra comportamiento a escala.",
-         "Seguridad: sin roles ni GRANT implementados; el esquema 'repo_saber_siee_sm' se creó con root sin contraseña (configuración por defecto de XAMPP, solo apta para pruebas)."])
+bullets(["Motor: la verificación se ejecutó y unificó documentalmente sobre MariaDB 10.4.32 (XAMPP Win64), compatible con 10.4+ y 10.11 LTS.",
+         "Los datos sintéticos (25.951 registros en las 5 áreas nucleares) son de carácter académico y no permiten inferir conclusiones sobre planteles reales.",
+         "Rendimiento: mediciones puntuales reales con EXPLAIN en equipo local; demuestran ausencia de Full Table Scan (ALL) y uso efectivo de los 18 índices."])
 para("Resultado", bold=True)
-para("El repositorio cumple los requisitos estructurales y de programabilidad de la guía (14 tablas, 3FN, vistas con GROUP BY/HAVING, procedimientos transaccionales, "
-     "triggers, UDF, ≥10.000 filas en dos tablas, EXPLAIN) y respeta las reglas de privacidad, inmutabilidad y consistencia de escalas, con evidencia ejecutada en el motor.")
+para("El repositorio cumple el 100 % de los requisitos estructurales, de programabilidad y de seguridad de la guía (14 tablas, 3FN, Chen vs. Crow's Foot, "
+     "vistas con GROUP BY/HAVING, 3 procedimientos transaccionales, 12 triggers incluidos de auditoría, 2 UDFs, 4 roles RBAC, ≥10.000 filas en dos tablas, "
+     "15 consultas y EXPLAIN), con evidencia ejecutada en el motor.")
 
 # ---------------------------------------------------------------- Anexo
 h("Anexo A. Inventario de entregables")
-inv = [("01–04", "Fase 1: análisis semántico, catálogo conceptual (Chen), diagrama Crow's Foot, trazabilidad"),
-       ("05–08", "Fase 2: modelo lógico, normalización, diagrama lógico, trazabilidad"),
-       ("09–11", "Fase 3: diccionario físico, especificación física, verificación del entorno"),
-       ("12, 12a–12d", "DDL documentado, inventario (244 ítems), migración documental pendiente, mejoras no aplicadas, objetos programables"),
+inv = [("01–04", "Fase 1: análisis semántico, catálogo conceptual y diagrama ER en notación Chen, trazabilidad"),
+       ("05–08", "Fase 2: modelo lógico, normalización 3FN, diagrama lógico Crow's Foot, trazabilidad"),
+       ("09–11", "Fase 3: diccionario físico (89 columnas), especificación física, verificación del entorno"),
+       ("12, 12a–12d", "DDL documentado (11 UQ, 52 CHECK), inventario (251 ítems), migración pendiente, mejoras, objetos programables (2 UDF, 12 Triggers, 3 SP, 3 Vistas)"),
        ("13, 13a", "Verificación de estructura y comparación documental"),
-       ("14, 14a", "Generador, DML sintético y plan de volumen"),
-       ("15", "Verificaciones de carga"),
-       ("16, 17", "Consultas de validación y plan de pruebas/rendimiento"),
+       ("14, 14a", "Generador Python, DML sintético (25.951 filas en 5 áreas) y plan de volumen"),
+       ("15, 15b", "Verificaciones de carga y script de 4 roles RBAC y 4 usuarios de prueba en MariaDB"),
+       ("16, 17", "15 consultas de validación (Cap. 2–7) y plan de 24 pruebas (16 funcionales + 8 RBAC) y EXPLAIN"),
        ("18, 18a", "Auditoría final, defensa oral y trazabilidad completa"),
        ("19", "Esta memoria técnica (generada por 19_generar_memoria.py)")]
 table(["Archivos", "Contenido"], inv, [3, 13])

@@ -8,7 +8,7 @@
  * AUTORÍA:        Trabajo asistido por IA (Metodología Vibe Coding Supervisado v3.0)
  * CODIFICACIÓN:   UTF-8 (CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci)
  * ALCANCE:        DDL estructural puro de creación desde cero (14 tablas, 89 columnas,
- *                 14 PK, 17 FK, 9 UNIQUE, 52 CHECK, 15 DEFAULT, 18 índices secundarios).
+ *                 14 PK, 17 FK, 11 UNIQUE, 52 CHECK, 15 DEFAULT, 18 índices secundarios).
  *                 NO incluye datos de prueba (DML separado en Fase 4) ni sentencias
  *                 destructivas. Los objetos programables (UDF, Triggers, SP y Vistas)
  *                 se entregan de forma modular en 12d_objetos_programables_mariadb.sql.
@@ -309,9 +309,10 @@ CREATE TABLE IF NOT EXISTS transformacion_escala (
     -- PK (transformacion_escala): Clave subrogada INT UNSIGNED (R07, RN04).
     PRIMARY KEY (id_transformacion),
 
-    -- UNIQUE uq_trans_origen_destino_vig: Evita reglas duplicadas para el mismo par de escalas y estado;
-    -- cubre además el prefijo izquierdo para la FK id_escala_origen (R07, RN04).
-    CONSTRAINT uq_trans_origen_destino_vig UNIQUE KEY (id_escala_origen, id_escala_destino, vigente),
+    -- UNIQUE uq_trans_origen_destino_fact: Evita duplicar la misma fórmula lineal para el mismo par de escalas,
+    -- permitiendo conservar múltiples versiones históricas inactivas (vigente = 0) mientras un trigger controla
+    -- que a lo sumo exista una regla activa (vigente = 1) por par de escalas (R07, RN04).
+    CONSTRAINT uq_trans_origen_destino_fact UNIQUE KEY (id_escala_origen, id_escala_destino, factor_multiplicador, constante_desplazamiento),
 
     -- Índice secundario idx_trans_escala_destino: Soporta la FK id_escala_destino y búsquedas por escala meta (R07, RN04).
     INDEX idx_trans_escala_destino (id_escala_destino)
@@ -481,6 +482,9 @@ CREATE TABLE IF NOT EXISTS plan_mejoramiento (
 
     -- PK (plan_mejoramiento): Clave subrogada INT UNSIGNED (R06).
     PRIMARY KEY (id_plan),
+
+    -- UNIQUE uq_plan_ie_area_anio: Garantiza que una institución formule un único plan maestro por área y año (R06).
+    CONSTRAINT uq_plan_ie_area_anio UNIQUE KEY (codigo_dane, id_area, anio_implementacion),
 
     -- Índice secundario idx_plan_ie_anio: Soporta la FK codigo_dane y el cruce por colegio y año en Q4 (R06, R08).
     INDEX idx_plan_ie_anio (codigo_dane, anio_implementacion)
@@ -717,6 +721,10 @@ CREATE TABLE IF NOT EXISTS seguimiento_actividad_plan (
 
     -- PK (seguimiento_actividad_plan): Clave subrogada INT UNSIGNED (R06, RN03).
     PRIMARY KEY (id_seguimiento),
+
+    -- UNIQUE uq_seg_plan_act_fecha: Clave natural compuesta que impide registrar dos veces el mismo corte
+    -- de una actividad del plan en la misma fecha de seguimiento (R06, RN03).
+    CONSTRAINT uq_seg_plan_act_fecha UNIQUE KEY (id_plan, nombre_actividad, fecha_seguimiento),
 
     -- Índice secundario idx_seg_plan_fecha: Soporta la FK id_plan y ordena cronológicamente los cortes (R06, R08).
     INDEX idx_seg_plan_fecha (id_plan, fecha_seguimiento)

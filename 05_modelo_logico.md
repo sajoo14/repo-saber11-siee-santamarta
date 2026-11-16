@@ -1,7 +1,7 @@
 # 05 · Modelo Lógico Relacional (Fase 2)
 
 **Proyecto:** Repositorio Saber 11, SIEE y Planes de Mejoramiento (Santa Marta)  
-**Estado:** PROPUESTO (Independiente del SGBD — Pendiente de aprobación de Fase 2 antes de la Puerta del Motor)
+**Estado:** APROBADO (Modelo Lógico Relacional en 3FN — Independiente del SGBD)
 
 ---
 
@@ -32,7 +32,7 @@
 
 5. **`TRANSFORMACION_ESCALA`** *(Resuelve M:N recursiva entre escalas — RN04)*
    * **PK:** `id_transformacion` (`Entero`)
-   * **Clave alternativa (`UQ Compuesta`):** `(id_escala_origen, id_escala_destino, vigente)` *(donde solo existe una transformación vigente por par de escalas)*.
+   * **Clave alternativa (`UQ Compuesta`):** `(id_escala_origen, id_escala_destino, factor_multiplicador, constante_desplazamiento)` *(impide duplicar la misma fórmula lineal para un par de escalas, permitiendo conservar múltiples versiones históricas inactivas `vigente = 0`, mientras un disparador garantiza a lo sumo una regla `vigente = 1` por par de escalas)*.
    * **FK:** `id_escala_origen` $\rightarrow$ `ESCALA_EVALUACION`; `id_escala_destino` $\rightarrow$ `ESCALA_EVALUACION` (`id_escala_origen <> id_escala_destino`).
    * **Atributos:** `factor_multiplicador` (`Decimal(10,6)`, NOT NULL), `constante_desplazamiento` (`Decimal(10,4)`, NOT NULL), `metodo_justificacion` (`Texto largo`, NOT NULL), `vigente` (`Booleano`, NOT NULL).
 
@@ -67,12 +67,14 @@
 
 11. **`PLAN_MEJORAMIENTO`** *(Resuelve M:N Institución–Área por año)*
     * **PK:** `id_plan` (`Entero`)
+    * **Clave alternativa (`UQ Compuesta`):** `(codigo_dane, id_area, anio_implementacion)` *(garantiza que un colegio formule un único plan maestro por área de prueba y año lectivo)*.
     * **FK:** `codigo_dane` $\rightarrow$ `INSTITUCION_EDUCATIVA`; `id_area` $\rightarrow$ `AREA_EVALUACION`.
     * **Atributos:** `anio_implementacion` (`Entero`, NOT NULL), `titulo_plan` (`Texto(150)`, NOT NULL), `diagnostico_base` (`Texto largo`, NOT NULL), `meta_cuantitativa` (`Decimal(6,2)`, NOT NULL), `estado_plan` (`Texto(20)`, NOT NULL).
 
 12. **`SEGUIMIENTO_ACTIVIDAD_PLAN`** *(Desglosa actividades y cortes de seguimiento sin sobrescribir)*
     * **PK:** `id_seguimiento` (`Entero`)
-    * **FK:** `id_plan` $\rightarrow$ `PLAN_MEJORAMIENTO`.
+    * **Clave alternativa (`UQ Compuesta`):** `(id_plan, nombre_actividad, fecha_seguimiento)` *(identificador natural de negocio que impide duplicar el mismo corte de una actividad en la misma fecha)*.
+    * **FK:** `id_plan` $\rightarrow$ `PLAN_MEJORAMIENTO` (cardinalidad `0..N` desde el plan hacia sus cortes, pues un plan recién formulado nace con `0` seguimientos).
     * **Atributos:** `nombre_actividad` (`Texto(150)`, NOT NULL), `fecha_seguimiento` (`Fecha`, NOT NULL), `porcentaje_avance_corte` (`Decimal(5,2)`, NOT NULL, `[0,100]`), `observaciones` (`Texto largo`, NULL), `estado_actividad` (`Texto(20)`, NOT NULL).
 
 13. **`APOYO_INSTITUCIONAL`**

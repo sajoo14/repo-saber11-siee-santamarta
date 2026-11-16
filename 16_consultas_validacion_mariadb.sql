@@ -5,11 +5,14 @@
  * SGBD / MOTOR:   MariaDB 10.4.32 / 10.11.16 (XAMPP Win64 AMD64)
  * BASE DE DATOS:  repo_saber_siee_sm
  * FECHA:          2026-11-15
- * PROPÓSITO:      Conjunto de 12 consultas funcionales y analíticas diferenciadas (E15)
+ * PROPÓSITO:      Conjunto de 15 consultas funcionales y analíticas diferenciadas (E15)
  *                 que responden las 4 preguntas obligatorias del enunciado (Q1–Q4),
- *                 emplean JOIN, GROUP BY, HAVING, subconsultas, funciones de ventana,
- *                 UDF y vistas aprobadas, y verifican los casos límite e invariantes
- *                 del dominio (RN01–RN05).
+ *                 cubren íntegramente los Capítulos 2 al 7 de la asignatura (SELECT,
+ *                 filtros, agregaciones, GROUP BY, HAVING, subconsultas autónomas y
+ *                 correlacionadas, INNER/LEFT/CROSS JOIN, operaciones de conjunto
+ *                 UNION/EXCEPT, funciones de ventana LAG(), CASE, paginación y pivoteo
+ *                 por columnas), invocan las 2 UDFs y las 3 vistas aprobadas, y verifican
+ *                 los casos límite e invariantes del dominio (RN01–RN05).
  * NOTA:           Este script contiene exclusivamente sentencias SELECT de validación
  *                 (separado de la creación de vistas conforme a la Fase 5 del Prompt).
  * ESTADO ACTUAL:  PROBADO EN SGBD
@@ -462,3 +465,99 @@ FROM apoyo_institucional ap
 INNER JOIN cohorte c ON c.id_cohorte = ap.id_cohorte
 GROUP BY ap.tipo_apoyo, ap.entidad_financiadora
 ORDER BY inversion_total_cop DESC;
+
+
+/* =====================================================================================
+ * CONSULTA C13 (Capítulo 6 · Operaciones de Conjunto Nativas: EXCEPT y UNION en MariaDB)
+ * -------------------------------------------------------------------------------------
+ * - Requisitos:      R01, R05, R06 | Cobertura Curricular: Capítulo 6 (Conjuntos)
+ * - Propósito:       Identificar mediante operadores de conjunto (EXCEPT y UNION):
+ *                    1) Colegios con planes de mejoramiento en ejecución en 2024 que NO
+ *                       recibieron apoyo de modalidad 'PAGO_INSCRIPCION' en 2024 (EXCEPT).
+ *                    2) Unificado con colegios que sí recibieron ambos (INTERSECT / UNION)
+ *                       para focalizar el presupuesto distrital de la Alcaldía.
+ * ===================================================================================== */
+SELECT
+    codigo_dane,
+    nombre_ie,
+    comuna_localidad,
+    'PLAN_EN_EJECUCION_SIN_SUBSIDIO_INSCRIPCION_2024' AS condicion_conjunto
+FROM (
+    SELECT ie.codigo_dane, ie.nombre_ie, ie.comuna_localidad
+      FROM institucion_educativa ie
+      INNER JOIN plan_mejoramiento pm ON pm.codigo_dane = ie.codigo_dane
+     WHERE pm.anio_implementacion = 2024
+       AND pm.estado_plan = 'EN_EJECUCION'
+    EXCEPT
+    SELECT ie2.codigo_dane, ie2.nombre_ie, ie2.comuna_localidad
+      FROM institucion_educativa ie2
+      INNER JOIN cohorte c2              ON c2.codigo_dane = ie2.codigo_dane
+      INNER JOIN apoyo_institucional ap2 ON ap2.id_cohorte = c2.id_cohorte
+     WHERE c2.anio_lectivo = 2024
+       AND ap2.tipo_apoyo  = 'PAGO_INSCRIPCION'
+) AS brecha_focalizacion
+UNION ALL
+SELECT
+    ie3.codigo_dane,
+    ie3.nombre_ie,
+    ie3.comuna_localidad,
+    'CON_SUBSIDIO_INSCRIPCION_ACTIVO_2024' AS condicion_conjunto
+FROM institucion_educativa ie3
+INNER JOIN cohorte c3              ON c3.codigo_dane = ie3.codigo_dane
+INNER JOIN apoyo_institucional ap3 ON ap3.id_cohorte = c3.id_cohorte
+WHERE c3.anio_lectivo = 2024
+  AND ap3.tipo_apoyo  = 'PAGO_INSCRIPCION'
+ORDER BY condicion_conjunto DESC, codigo_dane ASC
+LIMIT 15;
+
+
+/* =====================================================================================
+ * CONSULTA C14 (Capítulo 7 · Pivoteo Multi-Área mediante Agregación Condicional CASE +
+ *               Paginación LIMIT/OFFSET)
+ * -------------------------------------------------------------------------------------
+ * - Requisitos:      R02, R03, R08 | Regla: RN02 (k-anonimato) | Cap. 7 (Pivoteo)
+ * - Propósito:       Construir una matriz ejecutiva (tabla pivoteada por columnas) que
+ *                    muestre en una sola fila por zona territorial (comuna/corregimiento)
+ *                    el puntaje promedio en las 5 áreas nucleares del Icfes (MAT, LEC,
+ *                    SOC, NAT, ING) y el total de evaluaciones publicadas.
+ * ===================================================================================== */
+SELECT
+    comuna_localidad,
+    COUNT(DISTINCT codigo_dane)                                               AS colegios_evaluados,
+    ROUND(AVG(CASE WHEN codigo_area = 'MAT' THEN puntaje_promedio_ie END), 2) AS piv_matematicas,
+    ROUND(AVG(CASE WHEN codigo_area = 'LEC' THEN puntaje_promedio_ie END), 2) AS piv_lectura_critica,
+    ROUND(AVG(CASE WHEN codigo_area = 'SOC' THEN puntaje_promedio_ie END), 2) AS piv_sociales_ciudadanas,
+    ROUND(AVG(CASE WHEN codigo_area = 'NAT' THEN puntaje_promedio_ie END), 2) AS piv_ciencias_naturales,
+    ROUND(AVG(CASE WHEN codigo_area = 'ING' THEN puntaje_promedio_ie END), 2) AS piv_ingles,
+    ROUND(AVG(puntaje_promedio_ie), 2)                                        AS promedio_general_5_areas,
+    SUM(total_estudiantes_evaluados)                                          AS total_evaluaciones_publicadas
+FROM vw_evolucion_ie_area_anio
+WHERE tipo_instrumento = 'SABER_11'
+GROUP BY comuna_localidad
+ORDER BY promedio_general_5_areas DESC, comuna_localidad ASC
+LIMIT 13 OFFSET 0;
+
+
+/* =====================================================================================
+ * CONSULTA C15 (Capítulos 3, 4 y 12 · Diagnóstico Multi-Área de Brecha Nacional usando
+ *               la Segunda UDF fn_clasificar_brecha_nacional)
+ * -------------------------------------------------------------------------------------
+ * - Requisitos:      R04, R07, R08 | Reglas: RN02, RN04
+ * - Propósito:       Clasificar el desempeño de las instituciones en las 5 áreas
+ *                    evaluadas en Saber 11 (MAT, LEC, SOC, NAT, ING) durante 2024 frente
+ *                    al promedio nacional oficial mediante fn_clasificar_brecha_nacional.
+ * ===================================================================================== */
+SELECT
+    vw.codigo_area,
+    vw.nombre_area,
+    vw.clasificacion_brecha,
+    COUNT(DISTINCT vw.codigo_dane)              AS total_colegios_en_categoria,
+    ROUND(AVG(vw.promedio_colegio_homologado), 2) AS promedio_grupo_colegios,
+    ROUND(AVG(vw.promedio_nacional_oficial), 2)   AS referente_nacional_icfes,
+    ROUND(AVG(vw.brecha_frente_nacional), 2)      AS brecha_media_categoria
+FROM vw_brecha_promedio_nacional vw
+WHERE vw.anio_lectivo     = 2024
+  AND vw.tipo_instrumento = 'SABER_11'
+GROUP BY vw.codigo_area, vw.nombre_area, vw.clasificacion_brecha
+ORDER BY vw.codigo_area ASC, brecha_media_categoria DESC;
+
